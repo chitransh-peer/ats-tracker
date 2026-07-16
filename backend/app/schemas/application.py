@@ -1,0 +1,34 @@
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel
+
+
+class ApplicationCreate(BaseModel):
+    candidate_id: uuid.UUID
+    job_id: uuid.UUID
+    source: str | None = None
+
+
+class ApplicationRead(BaseModel):
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    candidate_id: uuid.UUID
+    job_id: uuid.UUID
+    current_stage_id: uuid.UUID | None
+    source: str | None
+    status: str
+    applied_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ApplicationStageHistoryRead(BaseModel):
+    id: uuid.UUID
+    from_stage_id: uuid.UUID | None
+    to_stage_id: uuid.UUID | None
+    changed_by: uuid.UUID | None
+    note: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

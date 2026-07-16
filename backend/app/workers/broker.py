@@ -1,0 +1,9 @@
+import dramatiq
+from dramatiq.brokers.redis import RedisBroker
+
+from app.core.config import get_settings
+
+_settings = get_settings()
+
+broker = RedisBroker(url=_settings.redis_url)
+dramatiq.set_broker(broker)

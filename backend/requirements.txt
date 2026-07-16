@@ -1,0 +1,17 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic[email]==2.10.5
+pydantic-settings==2.7.1
+sqlalchemy==2.0.36
+alembic==1.14.0
+psycopg[binary]==3.2.10
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+pyjwt==2.10.1
+python-multipart==0.0.20
+redis==5.2.1
+dramatiq[redis]==1.17.1
+boto3==1.35.97
+pytest==8.3.4
+pytest-asyncio==0.25.1
+httpx==0.28.1

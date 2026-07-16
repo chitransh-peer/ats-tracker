@@ -1,0 +1,61 @@
+import { apiClient } from "./client";
+import type { Candidate, CandidateCreateInput, CandidateNote } from "./types";
+
+export interface CandidateFilters {
+  status?: string;
+  pool?: boolean;
+  search?: string;
+}
+
+function buildQuery(params: Record<string, string | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) query.set(key, value);
+  }
+  const qs = query.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export function listCandidates(filters: CandidateFilters = {}) {
+  return apiClient.get<Candidate[]>(
+    `/candidates${buildQuery({
+      status: filters.status,
+      pool: filters.pool ? "true" : undefined,
+      search: filters.search,
+    })}`,
+  );
+}
+
+export function getCandidate(candidateId: string) {
+  return apiClient.get<Candidate>(`/candidates/${candidateId}`);
+}
+
+export function createCandidate(input: CandidateCreateInput) {
+  return apiClient.post<Candidate>("/candidates", input);
+}
+
+export function updateCandidate(
+  candidateId: string,
+  input: Partial<CandidateCreateInput> & { status?: string; rating?: number },
+) {
+  return apiClient.patch<Candidate>(`/candidates/${candidateId}`, input);
+}
+
+export function addCandidateNote(candidateId: string, body: string) {
+  return apiClient.post<CandidateNote>(`/candidates/${candidateId}/notes`, { body });
+}
+
+export function listCandidateNotes(candidateId: string) {
+  return apiClient.get<CandidateNote[]>(`/candidates/${candidateId}/notes`);
+}
+
+export function setCandidateTags(candidateId: string, tags: string[]) {
+  return apiClient.post<Candidate>(`/candidates/${candidateId}/tags`, { tags });
+}
+
+export function uploadCandidateDocument(candidateId: string, file: File, documentType = "resume") {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("document_type", documentType);
+  return apiClient.postForm(`/candidates/${candidateId}/documents`, formData);
+}
