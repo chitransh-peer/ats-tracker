@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 
 class UserUpdate(BaseModel):
@@ -12,7 +12,7 @@ class UserUpdate(BaseModel):
 class UserRead(BaseModel):
     id: uuid.UUID
     organization_id: uuid.UUID
-    email: EmailStr
+    email: str
     full_name: str
     is_active: bool
     roles: list[str]
