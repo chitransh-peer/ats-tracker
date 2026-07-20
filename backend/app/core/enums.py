@@ -83,6 +83,10 @@ class AuditAction(str, enum.Enum):
     OFFER_SENT = "offer_sent"
     TEMPLATE_CREATED = "template_created"
     TEMPLATE_UPDATED = "template_updated"
+    RESUME_PARSED = "resume_parsed"
+    AI_EVALUATION_TRIGGERED = "ai_evaluation_triggered"
+    AI_EVALUATION_OVERRIDDEN = "ai_evaluation_overridden"
+    VIEW_AS_STARTED = "view_as_started"
 
 
 class JobStatus(str, enum.Enum):
@@ -154,6 +158,27 @@ class CandidateDocumentType(str, enum.Enum):
 class DuplicateMatchReason(str, enum.Enum):
     EMAIL = "email"
     PHONE = "phone"
+
+
+class ResumeParseStatus(str, enum.Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class AIEvaluationStatus(str, enum.Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class AIRecommendationLabel(str, enum.Enum):
+    STRONG_FIT = "strong_fit"
+    FIT = "fit"
+    PARTIAL_FIT = "partial_fit"
+    NOT_A_FIT = "not_a_fit"
 
 
 class InterviewMode(str, enum.Enum):

@@ -45,6 +45,21 @@ def create_access_token(user_id: str, org_id: str, role_names: list[str]) -> str
     )
 
 
+def create_view_as_token(user_id: str, org_id: str, role_name: str) -> str:
+    """Short-lived access token for Super Admin role preview.
+
+    Deliberately not refreshable (no matching refresh token is issued) so an
+    expired preview session always falls back to the real identity rather
+    than silently persisting.
+    """
+    return _create_token(
+        subject=user_id,
+        token_type="access",
+        expires_delta=timedelta(minutes=10),
+        extra_claims={"org_id": org_id, "roles": [role_name], "impersonating": True},
+    )
+
+
 def create_refresh_token(user_id: str) -> str:
     settings = get_settings()
     return _create_token(

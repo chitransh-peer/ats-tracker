@@ -2,16 +2,41 @@ import secrets
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.enums import ApplicationStatus, JobStatus
+from app.core.enums import ApplicationStatus, JobStatus, RoleName
 from app.core.exceptions import NotFoundError, ValidationAppError
+from app.core.scoping import scoped_roles
 from app.db.models.application import Application
+from app.db.models.interview import Interview, InterviewPanelMember
 from app.db.models.job import Job
 from app.db.models.pipeline_stage import StageTemplateStage
+from app.schemas.auth import CurrentUser
 from app.services.pipeline.service import seed_default_stage_template
 from app.utils.text import slugify
+
+
+def _scope_filter(query, viewer: CurrentUser | None):
+    if viewer is None:
+        return query
+    scopes = scoped_roles(viewer.roles)
+    if not scopes:
+        return query
+
+    conditions = []
+    if RoleName.HIRING_MANAGER.value in scopes:
+        conditions.append(Job.hiring_manager_id == viewer.id)
+    if RoleName.INTERVIEWER.value in scopes:
+        conditions.append(
+            Job.id.in_(
+                select(Application.job_id)
+                .join(Interview, Interview.application_id == Application.id)
+                .join(InterviewPanelMember, InterviewPanelMember.interview_id == Interview.id)
+                .where(InterviewPanelMember.user_id == viewer.id)
+            )
+        )
+    return query.where(or_(*conditions))
 
 _VALID_TRANSITIONS: dict[str, set[str]] = {
     JobStatus.DRAFT.value: {JobStatus.ACTIVE.value, JobStatus.CANCELLED.value},
@@ -50,10 +75,11 @@ def create_job(db: Session, *, organization_id: uuid.UUID, actor_id: uuid.UUID |
     return job
 
 
-def get_job(db: Session, organization_id: uuid.UUID, job_id: uuid.UUID) -> Job:
-    job = db.scalar(
-        select(Job).where(Job.id == job_id, Job.organization_id == organization_id, Job.deleted_at.is_(None))
-    )
+def get_job(
+    db: Session, organization_id: uuid.UUID, job_id: uuid.UUID, *, viewer: CurrentUser | None = None
+) -> Job:
+    query = select(Job).where(Job.id == job_id, Job.organization_id == organization_id, Job.deleted_at.is_(None))
+    job = db.scalar(_scope_filter(query, viewer))
     if job is None:
         raise NotFoundError("Job not found")
     return job
@@ -67,6 +93,7 @@ def list_jobs(
     department: str | None = None,
     client_id: uuid.UUID | None = None,
     recruiter_id: uuid.UUID | None = None,
+    viewer: CurrentUser | None = None,
 ) -> list[Job]:
     query = select(Job).where(Job.organization_id == organization_id, Job.deleted_at.is_(None))
     if status is not None:
@@ -77,6 +104,7 @@ def list_jobs(
         query = query.where(Job.client_id == client_id)
     if recruiter_id is not None:
         query = query.where(Job.recruiter_id == recruiter_id)
+    query = _scope_filter(query, viewer)
     query = query.order_by(Job.created_at.desc())
     return list(db.scalars(query).all())
 

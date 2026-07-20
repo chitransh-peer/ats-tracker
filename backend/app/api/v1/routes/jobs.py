@@ -61,7 +61,13 @@ def list_jobs(
     db: Session = Depends(get_db_session),
 ) -> list[JobRead]:
     jobs = job_service.list_jobs(
-        db, current_user.organization_id, status=status, department=department, client_id=client_id, recruiter_id=recruiter_id
+        db,
+        current_user.organization_id,
+        status=status,
+        department=department,
+        client_id=client_id,
+        recruiter_id=recruiter_id,
+        viewer=current_user,
     )
     return [_to_read(db, j) for j in jobs]
 
@@ -93,7 +99,7 @@ def get_job(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.JOB, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> JobRead:
-    job = job_service.get_job(db, current_user.organization_id, job_id)
+    job = job_service.get_job(db, current_user.organization_id, job_id, viewer=current_user)
     return _to_read(db, job)
 
 
@@ -104,7 +110,7 @@ def update_job(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.JOB, PermissionAction.UPDATE)),
     db: Session = Depends(get_db_session),
 ) -> JobRead:
-    job = job_service.get_job(db, current_user.organization_id, job_id)
+    job = job_service.get_job(db, current_user.organization_id, job_id, viewer=current_user)
     job = job_service.update_job(db, job, actor_id=current_user.id, **payload.model_dump(exclude_unset=True))
     record_audit(
         db,
@@ -124,7 +130,7 @@ def _transition_route(transition_fn, audit_action: AuditAction):
         current_user: CurrentUser = Depends(require_permission(PermissionResource.JOB, PermissionAction.UPDATE)),
         db: Session = Depends(get_db_session),
     ) -> JobRead:
-        job = job_service.get_job(db, current_user.organization_id, job_id)
+        job = job_service.get_job(db, current_user.organization_id, job_id, viewer=current_user)
         job = transition_fn(db, job, actor_id=current_user.id)
         record_audit(
             db,
@@ -163,5 +169,5 @@ def job_applications(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.APPLICATION, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> list[ApplicationRead]:
-    job_service.get_job(db, current_user.organization_id, job_id)
-    return list_applications(db, current_user.organization_id, job_id=job_id)
+    job_service.get_job(db, current_user.organization_id, job_id, viewer=current_user)
+    return list_applications(db, current_user.organization_id, job_id=job_id, viewer=current_user)

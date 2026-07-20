@@ -20,7 +20,9 @@ def list_offers(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.OFFER, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> list[OfferRead]:
-    return offer_service.list_offers(db, current_user.organization_id, application_id=application_id, status=status)
+    return offer_service.list_offers(
+        db, current_user.organization_id, application_id=application_id, status=status, viewer=current_user
+    )
 
 
 @router.post("", response_model=OfferRead, status_code=201)
@@ -50,7 +52,7 @@ def get_offer(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.OFFER, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> OfferRead:
-    return offer_service.get_offer(db, current_user.organization_id, offer_id)
+    return offer_service.get_offer(db, current_user.organization_id, offer_id, viewer=current_user)
 
 
 @router.patch("/{offer_id}", response_model=OfferRead)
@@ -60,7 +62,7 @@ def update_offer(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.OFFER, PermissionAction.UPDATE)),
     db: Session = Depends(get_db_session),
 ) -> OfferRead:
-    offer = offer_service.get_offer(db, current_user.organization_id, offer_id)
+    offer = offer_service.get_offer(db, current_user.organization_id, offer_id, viewer=current_user)
     offer = offer_service.update_offer(db, offer, actor_id=current_user.id, **payload.model_dump(exclude_unset=True))
     record_audit(
         db,
@@ -81,7 +83,7 @@ def submit_approval(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.OFFER, PermissionAction.UPDATE)),
     db: Session = Depends(get_db_session),
 ) -> OfferRead:
-    offer = offer_service.get_offer(db, current_user.organization_id, offer_id)
+    offer = offer_service.get_offer(db, current_user.organization_id, offer_id, viewer=current_user)
     offer = offer_service.submit_for_approval(db, offer, actor_id=current_user.id, note=payload.note)
     record_audit(
         db,
@@ -102,7 +104,7 @@ def approve_offer(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.OFFER, PermissionAction.MANAGE)),
     db: Session = Depends(get_db_session),
 ) -> OfferRead:
-    offer = offer_service.get_offer(db, current_user.organization_id, offer_id)
+    offer = offer_service.get_offer(db, current_user.organization_id, offer_id, viewer=current_user)
     offer = offer_service.approve_offer(db, offer, approver_id=current_user.id, note=payload.note)
     record_audit(
         db,
@@ -123,7 +125,7 @@ def reject_offer(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.OFFER, PermissionAction.MANAGE)),
     db: Session = Depends(get_db_session),
 ) -> OfferRead:
-    offer = offer_service.get_offer(db, current_user.organization_id, offer_id)
+    offer = offer_service.get_offer(db, current_user.organization_id, offer_id, viewer=current_user)
     offer = offer_service.reject_offer(db, offer, approver_id=current_user.id, note=payload.note)
     record_audit(
         db,
@@ -143,7 +145,7 @@ def send_offer(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.OFFER, PermissionAction.UPDATE)),
     db: Session = Depends(get_db_session),
 ) -> OfferRead:
-    offer = offer_service.get_offer(db, current_user.organization_id, offer_id)
+    offer = offer_service.get_offer(db, current_user.organization_id, offer_id, viewer=current_user)
     offer = offer_service.send_offer(db, offer)
     record_audit(
         db,
@@ -163,7 +165,7 @@ def accept_offer(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.OFFER, PermissionAction.UPDATE)),
     db: Session = Depends(get_db_session),
 ) -> OfferRead:
-    offer = offer_service.get_offer(db, current_user.organization_id, offer_id)
+    offer = offer_service.get_offer(db, current_user.organization_id, offer_id, viewer=current_user)
     return offer_service.mark_accepted(db, offer)
 
 
@@ -173,7 +175,7 @@ def decline_offer(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.OFFER, PermissionAction.UPDATE)),
     db: Session = Depends(get_db_session),
 ) -> OfferRead:
-    offer = offer_service.get_offer(db, current_user.organization_id, offer_id)
+    offer = offer_service.get_offer(db, current_user.organization_id, offer_id, viewer=current_user)
     return offer_service.mark_declined(db, offer)
 
 
@@ -183,5 +185,5 @@ def expire_offer(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.OFFER, PermissionAction.UPDATE)),
     db: Session = Depends(get_db_session),
 ) -> OfferRead:
-    offer = offer_service.get_offer(db, current_user.organization_id, offer_id)
+    offer = offer_service.get_offer(db, current_user.organization_id, offer_id, viewer=current_user)
     return offer_service.mark_expired(db, offer)

@@ -2,6 +2,9 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db_session
+from app.core.enums import AuditAction, RoleName
+from app.core.exceptions import ForbiddenError, ValidationAppError
+from app.core.security import create_view_as_token
 from app.schemas.auth import (
     CurrentUser,
     ForgotPasswordRequest,
@@ -11,8 +14,11 @@ from app.schemas.auth import (
     RefreshRequest,
     ResetPasswordRequest,
     TokenPair,
+    ViewAsRequest,
+    ViewAsResponse,
 )
 from app.schemas.user import UserRead
+from app.services.audit.service import record as record_audit
 from app.services.auth import service as auth_service
 from app.services.users.service import get_user_by_id, role_names_for_user
 
@@ -63,6 +69,33 @@ def accept_invite(payload: InviteAcceptRequest, db: Session = Depends(get_db_ses
         created_at=user.created_at,
         updated_at=user.updated_at,
     )
+
+
+@router.post("/view-as", response_model=ViewAsResponse)
+def view_as(
+    payload: ViewAsRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> ViewAsResponse:
+    if RoleName.SUPER_ADMIN.value not in current_user.roles:
+        raise ForbiddenError("Only Super Admin can preview other roles")
+    try:
+        role = RoleName(payload.role_name)
+    except ValueError:
+        raise ValidationAppError(f"Unknown role: {payload.role_name}")
+
+    token = create_view_as_token(str(current_user.id), str(current_user.organization_id), role.value)
+    record_audit(
+        db,
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action=AuditAction.VIEW_AS_STARTED.value,
+        resource_type="user",
+        resource_id=str(current_user.id),
+        metadata={"role_name": role.value},
+    )
+    db.commit()
+    return ViewAsResponse(access_token=token)
 
 
 @router.get("/me", response_model=UserRead)

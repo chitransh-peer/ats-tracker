@@ -1,4 +1,5 @@
 from app.db.base import Base
+from app.db.models.ai import AIEvaluation, AIEvaluationOverride, ParsedResume, ResumeParseRun
 from app.db.models.application import Application, ApplicationStageHistory
 from app.db.models.audit_log import AuditLog
 from app.db.models.candidate import (
@@ -59,4 +60,8 @@ __all__ = [
     "OfferApproval",
     "CommunicationTemplate",
     "OutboundMessage",
+    "ResumeParseRun",
+    "ParsedResume",
+    "AIEvaluation",
+    "AIEvaluationOverride",
 ]

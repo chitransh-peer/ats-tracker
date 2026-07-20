@@ -15,3 +15,5 @@ boto3==1.35.97
 pytest==8.3.4
 pytest-asyncio==0.25.1
 httpx==0.28.1
+pypdf==5.1.0
+python-docx==1.1.2

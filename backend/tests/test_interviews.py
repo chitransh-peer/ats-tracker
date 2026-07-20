@@ -58,6 +58,8 @@ def test_submit_feedback_and_consolidated_view(client, make_user, make_job, make
             "round_name": "Recruiter Screen",
             "mode": "Phone",
             "scheduled_at": "2026-08-01T10:00:00Z",
+            "panel_user_ids": [str(interviewer.id)],
+            "primary_interviewer_id": str(interviewer.id),
         },
         headers=recruiter_headers,
     ).json()

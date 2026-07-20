@@ -37,6 +37,15 @@ class InviteAcceptRequest(BaseModel):
     password: str = Field(min_length=8)
 
 
+class ViewAsRequest(BaseModel):
+    role_name: str
+
+
+class ViewAsResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
 class CurrentUser(BaseModel):
     """Identity resolved from the access token's claims only.
 

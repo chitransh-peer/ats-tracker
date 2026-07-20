@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.routes import (
+    ai,
     applications,
     audit,
     auth,
@@ -13,6 +14,7 @@ from app.api.v1.routes import (
     pipeline,
     reports,
     roles,
+    settings,
     templates,
     users,
     vendors,
@@ -34,3 +36,5 @@ api_router.include_router(offers.router)
 api_router.include_router(templates.router)
 api_router.include_router(reports.router)
 api_router.include_router(audit.router)
+api_router.include_router(settings.router)
+api_router.include_router(ai.router)

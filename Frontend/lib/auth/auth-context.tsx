@@ -1,8 +1,15 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { login as apiLogin, logout as apiLogout, me } from "@/lib/api/auth";
-import { clearTokens, getAccessToken, setTokens } from "@/lib/api/client";
+import { login as apiLogin, logout as apiLogout, me, viewAsRole as apiViewAsRole } from "@/lib/api/auth";
+import {
+  clearTokens,
+  clearViewAsToken,
+  getAccessToken,
+  getViewAsRole,
+  setTokens,
+  setViewAsToken,
+} from "@/lib/api/client";
 import type { CurrentUserProfile } from "@/lib/api/types";
 
 interface AuthContextValue {
@@ -10,6 +17,9 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  viewAsRole: string | null;
+  startViewAs: (roleName: string) => Promise<void>;
+  exitViewAs: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -17,6 +27,11 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<CurrentUserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [viewAsRole, setViewAsRoleState] = useState<string | null>(null);
+
+  useEffect(() => {
+    setViewAsRoleState(getViewAsRole());
+  }, []);
 
   const loadUser = useCallback(async () => {
     if (!getAccessToken()) {
@@ -58,8 +73,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = "/auth/login";
   }, []);
 
+  const startViewAs = useCallback(async (roleName: string) => {
+    try {
+      const { access_token } = await apiViewAsRole(roleName);
+      setViewAsToken(access_token, roleName);
+      setViewAsRoleState(roleName);
+      window.location.reload();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not start role preview";
+      window.alert(message);
+    }
+  }, []);
+
+  const exitViewAs = useCallback(() => {
+    clearViewAsToken();
+    setViewAsRoleState(null);
+    window.location.reload();
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, logout, viewAsRole, startViewAs, exitViewAs }}>
       {children}
     </AuthContext.Provider>
   );

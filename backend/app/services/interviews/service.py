@@ -1,12 +1,41 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.enums import RoleName
 from app.core.exceptions import NotFoundError
+from app.core.scoping import scoped_roles
 from app.db.models.application import Application
 from app.db.models.interview import Interview, InterviewFeedback, InterviewPanelMember
+from app.db.models.job import Job
+from app.schemas.auth import CurrentUser
+
+
+def _scope_filter(query, viewer: CurrentUser | None):
+    if viewer is None:
+        return query
+    scopes = scoped_roles(viewer.roles)
+    if not scopes:
+        return query
+
+    conditions = []
+    if RoleName.HIRING_MANAGER.value in scopes:
+        conditions.append(
+            Interview.application_id.in_(
+                select(Application.id)
+                .join(Job, Job.id == Application.job_id)
+                .where(Job.hiring_manager_id == viewer.id)
+            )
+        )
+    if RoleName.INTERVIEWER.value in scopes:
+        conditions.append(
+            Interview.id.in_(
+                select(InterviewPanelMember.interview_id).where(InterviewPanelMember.user_id == viewer.id)
+            )
+        )
+    return query.where(or_(*conditions))
 
 
 def _load(query):
@@ -54,10 +83,13 @@ def create_interview(
     return interview
 
 
-def get_interview(db: Session, organization_id: uuid.UUID, interview_id: uuid.UUID) -> Interview:
-    interview = db.scalar(
-        _load(select(Interview)).where(Interview.id == interview_id, Interview.organization_id == organization_id)
+def get_interview(
+    db: Session, organization_id: uuid.UUID, interview_id: uuid.UUID, *, viewer: CurrentUser | None = None
+) -> Interview:
+    query = _load(select(Interview)).where(
+        Interview.id == interview_id, Interview.organization_id == organization_id
     )
+    interview = db.scalar(_scope_filter(query, viewer))
     if interview is None:
         raise NotFoundError("Interview not found")
     return interview
@@ -69,12 +101,14 @@ def list_interviews(
     *,
     application_id: uuid.UUID | None = None,
     status: str | None = None,
+    viewer: CurrentUser | None = None,
 ) -> list[Interview]:
     query = _load(select(Interview)).where(Interview.organization_id == organization_id)
     if application_id is not None:
         query = query.where(Interview.application_id == application_id)
     if status is not None:
         query = query.where(Interview.status == status)
+    query = _scope_filter(query, viewer)
     query = query.order_by(Interview.scheduled_at)
     return list(db.scalars(query).all())
 

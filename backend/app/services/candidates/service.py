@@ -1,10 +1,12 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.enums import CandidateStatus, DuplicateMatchReason
+from app.core.enums import CandidateStatus, DuplicateMatchReason, RoleName
 from app.core.exceptions import NotFoundError
+from app.core.scoping import scoped_roles
+from app.db.models.application import Application
 from app.db.models.candidate import (
     Candidate,
     CandidateDocument,
@@ -13,9 +15,40 @@ from app.db.models.candidate import (
     CandidateTag,
     DuplicateCandidateLink,
 )
+from app.db.models.interview import Interview, InterviewPanelMember
+from app.db.models.job import Job
+from app.schemas.auth import CurrentUser
 from app.services.storage.service import build_storage_key, upload_bytes
 
 _TALENT_POOL_STATUSES = {CandidateStatus.PASSIVE.value, CandidateStatus.SILVER_MEDALIST.value}
+
+
+def _scope_filter(query, viewer: CurrentUser | None):
+    if viewer is None:
+        return query
+    scopes = scoped_roles(viewer.roles)
+    if not scopes:
+        return query
+
+    conditions = []
+    if RoleName.HIRING_MANAGER.value in scopes:
+        conditions.append(
+            Candidate.id.in_(
+                select(Application.candidate_id)
+                .join(Job, Job.id == Application.job_id)
+                .where(Job.hiring_manager_id == viewer.id)
+            )
+        )
+    if RoleName.INTERVIEWER.value in scopes:
+        conditions.append(
+            Candidate.id.in_(
+                select(Application.candidate_id)
+                .join(Interview, Interview.application_id == Application.id)
+                .join(InterviewPanelMember, InterviewPanelMember.interview_id == Interview.id)
+                .where(InterviewPanelMember.user_id == viewer.id)
+            )
+        )
+    return query.where(or_(*conditions))
 
 
 def _load(query):
@@ -75,14 +108,15 @@ def create_candidate(
     return candidate, duplicates
 
 
-def get_candidate(db: Session, organization_id: uuid.UUID, candidate_id: uuid.UUID) -> Candidate:
-    candidate = db.scalar(
-        _load(
-            select(Candidate).where(
-                Candidate.id == candidate_id, Candidate.organization_id == organization_id, Candidate.deleted_at.is_(None)
-            )
+def get_candidate(
+    db: Session, organization_id: uuid.UUID, candidate_id: uuid.UUID, *, viewer: CurrentUser | None = None
+) -> Candidate:
+    query = _load(
+        select(Candidate).where(
+            Candidate.id == candidate_id, Candidate.organization_id == organization_id, Candidate.deleted_at.is_(None)
         )
     )
+    candidate = db.scalar(_scope_filter(query, viewer))
     if candidate is None:
         raise NotFoundError("Candidate not found")
     return candidate
@@ -95,6 +129,7 @@ def list_candidates(
     status: str | None = None,
     talent_pool_only: bool = False,
     search: str | None = None,
+    viewer: CurrentUser | None = None,
 ) -> list[Candidate]:
     query = _load(select(Candidate)).where(
         Candidate.organization_id == organization_id, Candidate.deleted_at.is_(None)
@@ -106,6 +141,7 @@ def list_candidates(
     if search:
         like = f"%{search}%"
         query = query.where((Candidate.full_name.ilike(like)) | (Candidate.email.ilike(like)))
+    query = _scope_filter(query, viewer)
     query = query.order_by(Candidate.created_at.desc())
     return list(db.scalars(query).all())
 

@@ -65,7 +65,7 @@ def list_candidates(
     db: Session = Depends(get_db_session),
 ) -> list[CandidateRead]:
     candidates = candidate_service.list_candidates(
-        db, current_user.organization_id, status=status, talent_pool_only=pool, search=search
+        db, current_user.organization_id, status=status, talent_pool_only=pool, search=search, viewer=current_user
     )
     return [_to_read(c) for c in candidates]
 
@@ -115,7 +115,7 @@ def get_candidate(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.CANDIDATE, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> CandidateRead:
-    candidate = candidate_service.get_candidate(db, current_user.organization_id, candidate_id)
+    candidate = candidate_service.get_candidate(db, current_user.organization_id, candidate_id, viewer=current_user)
     return _to_read(candidate)
 
 
@@ -126,7 +126,7 @@ def update_candidate(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.CANDIDATE, PermissionAction.UPDATE)),
     db: Session = Depends(get_db_session),
 ) -> CandidateRead:
-    candidate = candidate_service.get_candidate(db, current_user.organization_id, candidate_id)
+    candidate = candidate_service.get_candidate(db, current_user.organization_id, candidate_id, viewer=current_user)
     candidate = candidate_service.update_candidate(
         db, candidate, actor_id=current_user.id, **payload.model_dump(exclude_unset=True)
     )
@@ -150,7 +150,7 @@ async def upload_document(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.CANDIDATE, PermissionAction.UPDATE)),
     db: Session = Depends(get_db_session),
 ) -> CandidateDocumentRead:
-    candidate = candidate_service.get_candidate(db, current_user.organization_id, candidate_id)
+    candidate = candidate_service.get_candidate(db, current_user.organization_id, candidate_id, viewer=current_user)
     data = await file.read()
     document = candidate_service.add_document(
         db,
@@ -171,7 +171,7 @@ def add_note(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.CANDIDATE, PermissionAction.UPDATE)),
     db: Session = Depends(get_db_session),
 ) -> CandidateNoteRead:
-    candidate = candidate_service.get_candidate(db, current_user.organization_id, candidate_id)
+    candidate = candidate_service.get_candidate(db, current_user.organization_id, candidate_id, viewer=current_user)
     note = candidate_service.add_note(db, candidate, author_id=current_user.id, body=payload.body)
     return note
 
@@ -182,7 +182,7 @@ def list_notes(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.CANDIDATE, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> list[CandidateNoteRead]:
-    candidate = candidate_service.get_candidate(db, current_user.organization_id, candidate_id)
+    candidate = candidate_service.get_candidate(db, current_user.organization_id, candidate_id, viewer=current_user)
     return candidate_service.list_notes(db, candidate)
 
 
@@ -193,7 +193,7 @@ def set_tags(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.CANDIDATE, PermissionAction.UPDATE)),
     db: Session = Depends(get_db_session),
 ) -> CandidateRead:
-    candidate = candidate_service.get_candidate(db, current_user.organization_id, candidate_id)
+    candidate = candidate_service.get_candidate(db, current_user.organization_id, candidate_id, viewer=current_user)
     candidate = candidate_service.set_tags(db, candidate, payload.tags)
     return _to_read(candidate)
 
@@ -204,8 +204,8 @@ def candidate_applications(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.APPLICATION, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> list[ApplicationRead]:
-    candidate_service.get_candidate(db, current_user.organization_id, candidate_id)
-    return list_applications(db, current_user.organization_id, candidate_id=candidate_id)
+    candidate_service.get_candidate(db, current_user.organization_id, candidate_id, viewer=current_user)
+    return list_applications(db, current_user.organization_id, candidate_id=candidate_id, viewer=current_user)
 
 
 @router.get("/{candidate_id}/messages", response_model=list[OutboundMessageRead])
@@ -214,7 +214,7 @@ def list_messages(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.CANDIDATE, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> list[OutboundMessageRead]:
-    candidate_service.get_candidate(db, current_user.organization_id, candidate_id)
+    candidate_service.get_candidate(db, current_user.organization_id, candidate_id, viewer=current_user)
     return communication_service.list_messages(db, current_user.organization_id, candidate_id=candidate_id)
 
 
@@ -225,7 +225,7 @@ def send_message(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.CANDIDATE, PermissionAction.UPDATE)),
     db: Session = Depends(get_db_session),
 ) -> OutboundMessageRead:
-    candidate_service.get_candidate(db, current_user.organization_id, candidate_id)
+    candidate_service.get_candidate(db, current_user.organization_id, candidate_id, viewer=current_user)
     return communication_service.log_message(
         db,
         organization_id=current_user.organization_id,

@@ -38,3 +38,9 @@ def upload_bytes(key: str, data: bytes, content_type: str) -> None:
     settings = get_settings()
     ensure_bucket_exists()
     get_client().put_object(Bucket=settings.storage_bucket, Key=key, Body=data, ContentType=content_type)
+
+
+def download_bytes(key: str) -> bytes:
+    settings = get_settings()
+    response = get_client().get_object(Bucket=settings.storage_bucket, Key=key)
+    return response["Body"].read()

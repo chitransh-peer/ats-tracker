@@ -40,6 +40,19 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
+const VIEW_AS_ROLES = [
+  "admin",
+  "executive",
+  "recruiter",
+  "hiring_manager",
+  "interviewer",
+  "candidate",
+];
+
+function formatRoleLabel(role: string) {
+  return role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 const nav = [
   { section: "Overview", items: [{ to: "/", label: "Dashboard", icon: LayoutDashboard }] },
   {
@@ -90,7 +103,7 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, isLoading, logout } = useAuth();
+  const { user, isLoading, logout, viewAsRole, startViewAs, exitViewAs } = useAuth();
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -112,8 +125,8 @@ export function AppShell({
     .join("")
     .slice(0, 2)
     .toUpperCase();
-  const roleLabel =
-    user.roles[0]?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) ?? "Member";
+  const isRealSuperAdmin = user.roles.includes("super_admin");
+  const roleLabel = viewAsRole ? formatRoleLabel(viewAsRole) : (user.roles[0] ? formatRoleLabel(user.roles[0]) : "Member");
 
   return (
     <div className="flex min-h-screen w-full bg-background">
@@ -177,7 +190,26 @@ export function AppShell({
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 sticky top-0 z-20 bg-background/80 backdrop-blur border-b border-border flex items-center gap-3 px-4 lg:px-6">
+        {viewAsRole && (
+          <div className="h-9 shrink-0 bg-amber-500 text-amber-950 flex items-center justify-center gap-3 text-xs font-medium px-4 sticky top-0 z-30">
+            <Sparkles className="h-3.5 w-3.5" />
+            Viewing as {formatRoleLabel(viewAsRole)} — permissions and data are restricted to this role
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-[11px] border-amber-950/30 bg-amber-500 hover:bg-amber-400 text-amber-950"
+              onClick={exitViewAs}
+            >
+              Exit preview
+            </Button>
+          </div>
+        )}
+        <header
+          className={cn(
+            "h-14 sticky z-20 bg-background/80 backdrop-blur border-b border-border flex items-center gap-3 px-4 lg:px-6",
+            viewAsRole ? "top-9" : "top-0",
+          )}
+        >
           <div className="flex-1 max-w-md relative">
             <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -226,6 +258,28 @@ export function AppShell({
                 <DropdownMenuItem disabled className="text-xs text-muted-foreground">
                   {user.email}
                 </DropdownMenuItem>
+                {isRealSuperAdmin && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      View as
+                    </DropdownMenuLabel>
+                    {VIEW_AS_ROLES.map((role) => (
+                      <DropdownMenuItem
+                        key={role}
+                        disabled={viewAsRole === role}
+                        onSelect={() => startViewAs(role)}
+                      >
+                        {formatRoleLabel(role)}
+                      </DropdownMenuItem>
+                    ))}
+                    {viewAsRole && (
+                      <DropdownMenuItem onSelect={exitViewAs} className="text-primary font-medium">
+                        Exit preview — back to Super Admin
+                      </DropdownMenuItem>
+                    )}
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={logout}>Sign out</DropdownMenuItem>
               </DropdownMenuContent>

@@ -2,18 +2,65 @@
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { AppShell, StageBadge, StatCard, StatusDot } from "@/components/layout/AppShell";
+import { AppShell, ScorePill, StageBadge, StatCard, StatusDot } from "@/components/layout/AppShell";
 import { useJob, useJobAction } from "@/lib/hooks/use-jobs";
 import { useApplications } from "@/lib/hooks/use-applications";
 import { useCandidates } from "@/lib/hooks/use-candidates";
 import { useStages } from "@/lib/hooks/use-pipeline";
+import { useAiReview, useEvaluateApplication } from "@/lib/hooks/use-ai";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { initialsOf } from "@/lib/utils";
-import { MapPin, Briefcase, DollarSign, Sparkles } from "lucide-react";
+import { MapPin, Briefcase, DollarSign, Sparkles, Loader2 } from "lucide-react";
+
+function AiScoreCell({ applicationId }: { applicationId: string }) {
+  const { data: evaluation, isLoading } = useAiReview(applicationId);
+  const evaluateMutation = useEvaluateApplication();
+
+  if (isLoading) {
+    return <span className="text-xs text-muted-foreground">…</span>;
+  }
+
+  if (!evaluation) {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-6 text-[11px] px-2"
+        disabled={evaluateMutation.isPending}
+        onClick={(e) => {
+          e.preventDefault();
+          evaluateMutation.mutate(applicationId);
+        }}
+      >
+        {evaluateMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Run AI score"}
+      </Button>
+    );
+  }
+
+  if (evaluation.status === "pending" || evaluation.status === "processing") {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" /> Analyzing…
+      </span>
+    );
+  }
+
+  return (
+    <Link
+      href={`/ai-review?applicationId=${applicationId}`}
+      className="inline-flex items-center gap-1.5 hover:underline"
+    >
+      <ScorePill score={evaluation.overall_score ?? 0} />
+      <span className="text-xs text-muted-foreground">
+        {Math.round(evaluation.overall_score ?? 0)}%
+      </span>
+    </Link>
+  );
+}
 
 export function JobDetailClient() {
   const params = useParams<{ jobId: string }>();
@@ -176,6 +223,7 @@ export function JobDetailClient() {
                     <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
                       <tr>
                         <th className="p-3 text-left font-medium">Candidate</th>
+                        <th className="p-3 text-left font-medium">AI score</th>
                         <th className="p-3 text-left font-medium">Stage</th>
                         <th className="p-3 text-left font-medium">Status</th>
                         <th className="p-3 text-left font-medium">Applied</th>
@@ -184,7 +232,7 @@ export function JobDetailClient() {
                     <tbody className="divide-y">
                       {rows.length === 0 && (
                         <tr>
-                          <td colSpan={4} className="p-6 text-center text-sm text-muted-foreground">
+                          <td colSpan={5} className="p-6 text-center text-sm text-muted-foreground">
                             No candidates have applied yet.
                           </td>
                         </tr>
@@ -209,6 +257,9 @@ export function JobDetailClient() {
                                 <span className="text-muted-foreground">Unknown candidate</span>
                               )}
                             </div>
+                          </td>
+                          <td className="p-3">
+                            <AiScoreCell applicationId={application.id} />
                           </td>
                           <td className="p-3">
                             <StageBadge stage={stageName} />
@@ -292,7 +343,9 @@ export function JobDetailClient() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
-              AI-assisted resume scoring and matching is coming in a later phase.
+              Each candidate below shows an AI match score once evaluated. Click{" "}
+              <span className="font-medium text-foreground">Run AI score</span> next to a
+              candidate, then click the score to see the full breakdown.
             </CardContent>
           </Card>
         </aside>

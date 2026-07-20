@@ -28,7 +28,7 @@ def list_interviews(
     db: Session = Depends(get_db_session),
 ) -> list[InterviewRead]:
     return interview_service.list_interviews(
-        db, current_user.organization_id, application_id=application_id, status=status
+        db, current_user.organization_id, application_id=application_id, status=status, viewer=current_user
     )
 
 
@@ -59,7 +59,7 @@ def get_interview(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.INTERVIEW, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> InterviewRead:
-    return interview_service.get_interview(db, current_user.organization_id, interview_id)
+    return interview_service.get_interview(db, current_user.organization_id, interview_id, viewer=current_user)
 
 
 @router.patch("/{interview_id}", response_model=InterviewRead)
@@ -69,7 +69,7 @@ def update_interview(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.INTERVIEW, PermissionAction.UPDATE)),
     db: Session = Depends(get_db_session),
 ) -> InterviewRead:
-    interview = interview_service.get_interview(db, current_user.organization_id, interview_id)
+    interview = interview_service.get_interview(db, current_user.organization_id, interview_id, viewer=current_user)
     interview = interview_service.update_interview(
         db, interview, actor_id=current_user.id, **payload.model_dump(exclude_unset=True)
     )
@@ -92,7 +92,7 @@ def submit_feedback(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.INTERVIEW, PermissionAction.UPDATE)),
     db: Session = Depends(get_db_session),
 ) -> InterviewFeedbackRead:
-    interview = interview_service.get_interview(db, current_user.organization_id, interview_id)
+    interview = interview_service.get_interview(db, current_user.organization_id, interview_id, viewer=current_user)
     feedback = interview_service.submit_feedback(
         db,
         interview,
@@ -119,5 +119,5 @@ def consolidated_feedback(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.INTERVIEW, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> ConsolidatedFeedbackRead:
-    interview = interview_service.get_interview(db, current_user.organization_id, interview_id)
+    interview = interview_service.get_interview(db, current_user.organization_id, interview_id, viewer=current_user)
     return interview_service.consolidated_feedback(db, interview)

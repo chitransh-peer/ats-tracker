@@ -1,13 +1,34 @@
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import false, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.enums import OfferApprovalStatus, OfferStatus
+from app.core.enums import OfferApprovalStatus, OfferStatus, RoleName
 from app.core.exceptions import NotFoundError, ValidationAppError
+from app.core.scoping import scoped_roles
 from app.db.models.application import Application
+from app.db.models.job import Job
 from app.db.models.offer import Offer, OfferApproval, OfferVersion
+from app.schemas.auth import CurrentUser
+
+
+def _scope_filter(query, viewer: CurrentUser | None):
+    if viewer is None:
+        return query
+    scopes = scoped_roles(viewer.roles)
+    if not scopes:
+        return query
+
+    # Interviewer has no OFFER permission at all, so only Hiring Manager scoping applies here.
+    if RoleName.HIRING_MANAGER.value not in scopes:
+        return query.where(false())
+
+    return query.where(
+        Offer.application_id.in_(
+            select(Application.id).join(Job, Job.id == Application.job_id).where(Job.hiring_manager_id == viewer.id)
+        )
+    )
 
 
 def _load(query):
@@ -53,21 +74,30 @@ def create_offer(
     return offer
 
 
-def get_offer(db: Session, organization_id: uuid.UUID, offer_id: uuid.UUID) -> Offer:
-    offer = db.scalar(_load(select(Offer)).where(Offer.id == offer_id, Offer.organization_id == organization_id))
+def get_offer(
+    db: Session, organization_id: uuid.UUID, offer_id: uuid.UUID, *, viewer: CurrentUser | None = None
+) -> Offer:
+    query = _load(select(Offer)).where(Offer.id == offer_id, Offer.organization_id == organization_id)
+    offer = db.scalar(_scope_filter(query, viewer))
     if offer is None:
         raise NotFoundError("Offer not found")
     return offer
 
 
 def list_offers(
-    db: Session, organization_id: uuid.UUID, *, application_id: uuid.UUID | None = None, status: str | None = None
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    application_id: uuid.UUID | None = None,
+    status: str | None = None,
+    viewer: CurrentUser | None = None,
 ) -> list[Offer]:
     query = _load(select(Offer)).where(Offer.organization_id == organization_id)
     if application_id is not None:
         query = query.where(Offer.application_id == application_id)
     if status is not None:
         query = query.where(Offer.status == status)
+    query = _scope_filter(query, viewer)
     return list(db.scalars(query.order_by(Offer.created_at.desc())).all())
 
 

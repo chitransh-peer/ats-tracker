@@ -12,3 +12,12 @@ export function logout(refreshToken: string) {
 export function me() {
   return apiClient.get<CurrentUserProfile>("/auth/me");
 }
+
+export function viewAsRole(roleName: string) {
+  // Must use the real token even when already previewing another role —
+  // otherwise switching roles mid-preview would try to authenticate with
+  // the (unprivileged) preview token and get rejected.
+  return apiClient.postAsRealUser<{ access_token: string; token_type: string }>("/auth/view-as", {
+    role_name: roleName,
+  });
+}

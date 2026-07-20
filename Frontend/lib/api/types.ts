@@ -259,6 +259,104 @@ export interface AgingJobRow {
   age_days: number | null;
 }
 
+export interface AIEvaluation {
+  id: string;
+  application_id: string;
+  version: number;
+  status: string;
+  rule_score: number | null;
+  semantic_score: number | null;
+  overall_score: number | null;
+  recommendation_label: string | null;
+  strengths: string[];
+  gaps: string[];
+  risk_flags: string[];
+  matched_skills: string[];
+  missing_skills: string[];
+  suggested_interview_questions: string[];
+  confidence: number | null;
+  explanation_text: string | null;
+  model_name: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JDCriterion {
+  type: string;
+  requirement: string;
+  weight: number;
+  candidate_value: string;
+  status: string;
+  score: number;
+}
+
+export interface JDResumeComparison {
+  job_requirements: {
+    title: string;
+    required_skills: string[];
+    nice_to_have: string[];
+    experience: string | null;
+    education: string | null;
+    location: string | null;
+  };
+  candidate_profile: {
+    full_name: string;
+    skills: string[];
+    total_experience_years: number | null;
+    location: string | null;
+  };
+  criteria: JDCriterion[];
+  total_score: number;
+}
+
+export interface OrganizationSettings {
+  default_locale: string;
+  careers_page_enabled: boolean;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  settings: OrganizationSettings;
+}
+
+export interface Permission {
+  resource: string;
+  action: string;
+}
+
+export interface Role {
+  id: string;
+  name: string;
+  display_name: string;
+  is_system_role: boolean;
+  permissions: Permission[];
+}
+
+export interface User {
+  id: string;
+  organization_id: string;
+  email: string;
+  full_name: string;
+  is_active: boolean;
+  roles: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Template {
+  id: string;
+  organization_id: string;
+  name: string;
+  type: string;
+  subject: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AuditLogEntry {
   id: string;
   actor_user_id: string | null;
