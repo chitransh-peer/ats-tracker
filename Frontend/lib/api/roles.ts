@@ -8,3 +8,7 @@ export function listRoles() {
 export function listPermissions() {
   return apiClient.get<Permission[]>("/permissions");
 }
+
+export function updateRolePermissions(roleId: string, permissions: Permission[]) {
+  return apiClient.put<Role>(`/roles/${roleId}/permissions`, { permissions });
+}

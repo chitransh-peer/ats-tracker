@@ -13,6 +13,7 @@ import {
   GitBranch,
   Calendar,
   FileSignature,
+  ClipboardCheck,
   Building2,
   Truck,
   BarChart3,
@@ -65,6 +66,7 @@ const nav = [
       { to: "/pipeline", label: "Pipeline", icon: GitBranch },
       { to: "/interviews", label: "Interviews", icon: Calendar },
       { to: "/offers", label: "Offers", icon: FileSignature },
+      { to: "/onboarding", label: "Onboarding", icon: ClipboardCheck },
     ],
   },
   {

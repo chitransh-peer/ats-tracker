@@ -19,3 +19,7 @@ export function updateUser(userId: string, input: { full_name?: string; is_activ
 export function assignRoles(userId: string, roleNames: string[]) {
   return apiClient.post<User>(`/users/${userId}/roles`, { role_names: roleNames });
 }
+
+export function acceptInvite(input: { token: string; full_name: string; password: string }) {
+  return apiClient.post<{ id: string; email: string }>("/auth/invite/accept", input);
+}

@@ -15,11 +15,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import Link from "next/link";
 import { Shield, Search, Activity, Users, Lock, KeyRound, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth/auth-context";
 import { useUsers, useInviteUser, useUpdateUser } from "@/lib/hooks/use-users";
 import { useRoles } from "@/lib/hooks/use-roles";
-import { useAuditLogs } from "@/lib/hooks/use-audit";
+import type { Role } from "@/lib/api/types";
+import { RolePermissionsDialog } from "./role-permissions-dialog";
+import { AuditPanel } from "./audit-panel";
 
 const ALL_ROLES = [
   "super_admin",
@@ -36,15 +40,17 @@ function formatLabel(value: string) {
 }
 
 export function AdminClient() {
+  const { user } = useAuth();
+  const isSuperAdmin = (user?.roles ?? []).includes("super_admin");
   const { data: users, isLoading: usersLoading } = useUsers();
   const { data: roles, isLoading: rolesLoading } = useRoles();
-  const { data: auditLogs, isLoading: auditLoading } = useAuditLogs();
   const inviteMutation = useInviteUser();
   const updateUserMutation = useUpdateUser();
 
   const [search, setSearch] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("recruiter");
+  const [editingRole, setEditingRole] = useState<Role | null>(null);
 
   const filteredUsers = (users ?? []).filter(
     (u) =>
@@ -52,8 +58,6 @@ export function AdminClient() {
       u.full_name.toLowerCase().includes(search.toLowerCase()) ||
       u.email.toLowerCase().includes(search.toLowerCase()),
   );
-
-  const userById = new Map((users ?? []).map((u) => [u.id, u]));
 
   function handleInvite() {
     if (!inviteEmail) return;
@@ -136,12 +140,21 @@ export function AdminClient() {
                   {inviteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Invite user"}
                 </Button>
               </div>
-              {inviteMutation.isSuccess && (
-                <div className="text-xs text-emerald-700">
-                  Invitation created for {inviteMutation.data?.email} as {formatLabel(inviteMutation.data?.role_name ?? "")}.
-                  Token: <code className="font-mono">{inviteMutation.data?.invitation_token}</code> — there&apos;s no
-                  invite-acceptance page built in the frontend yet, so this token needs to be exchanged manually via
-                  <code className="font-mono"> POST /api/v1/auth/invite/accept</code>.
+              {inviteMutation.isSuccess && inviteMutation.data && (
+                <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 space-y-1">
+                  <div>
+                    Invitation created for <strong>{inviteMutation.data.email}</strong> as{" "}
+                    {formatLabel(inviteMutation.data.role_name)}.
+                  </div>
+                  <div>
+                    Share this activation link with them:{" "}
+                    <Link
+                      href={`/auth/invite/accept?token=${inviteMutation.data.invitation_token}`}
+                      className="font-mono underline break-all"
+                    >
+                      /auth/invite/accept?token={inviteMutation.data.invitation_token.slice(0, 12)}…
+                    </Link>
+                  </div>
                 </div>
               )}
             </CardHeader>
@@ -238,9 +251,21 @@ export function AdminClient() {
                         {(users ?? []).filter((u) => u.roles.includes(r.name)).length} members
                       </p>
                     </div>
-                    <Badge variant="secondary" className="text-[11px] shrink-0">
-                      {r.permissions.length} permissions
-                    </Badge>
+                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      <Badge variant="secondary" className="text-[11px]">
+                        {r.permissions.length} permissions
+                      </Badge>
+                      {isSuperAdmin && r.name !== "super_admin" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => setEditingRole(r)}
+                        >
+                          Edit permissions
+                        </Button>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className="text-xs uppercase text-muted-foreground mb-1.5">Permissions</div>
@@ -262,43 +287,15 @@ export function AdminClient() {
         </TabsContent>
 
         <TabsContent value="audit">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Recent activity</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              {auditLoading ? (
-                <div className="p-6 text-center text-sm text-muted-foreground">Loading…</div>
-              ) : (auditLogs ?? []).length === 0 ? (
-                <div className="p-6 text-center text-sm text-muted-foreground">No audit events yet.</div>
-              ) : (
-                <ul className="divide-y divide-border">
-                  {(auditLogs ?? []).map((log) => (
-                    <li key={log.id} className="p-3 flex items-start gap-3">
-                      <div className="h-8 w-8 rounded-md grid place-items-center shrink-0 bg-muted text-muted-foreground">
-                        <Activity className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm">
-                          <span className="font-medium">
-                            {log.actor_user_id ? userById.get(log.actor_user_id)?.full_name ?? "Unknown user" : "System"}
-                          </span>{" "}
-                          {formatLabel(log.action)} —{" "}
-                          <span className="text-muted-foreground">
-                            {log.resource_type}
-                            {log.resource_id ? ` (${log.resource_id.slice(0, 8)})` : ""}
-                          </span>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {new Date(log.created_at).toLocaleString()}
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
+          {isSuperAdmin ? (
+            <AuditPanel />
+          ) : (
+            <Card>
+              <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                Audit logs are restricted to Super Admins.
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="security">
@@ -319,6 +316,14 @@ export function AdminClient() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {editingRole && (
+        <RolePermissionsDialog
+          role={editingRole}
+          open={editingRole !== null}
+          onOpenChange={(open) => !open && setEditingRole(null)}
+        />
+      )}
     </AppShell>
   );
 }

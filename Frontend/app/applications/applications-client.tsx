@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { AppShell, StageBadge, StatCard } from "@/components/layout/AppShell";
+import { AppShell, StageBadge, StatCard, ScorePill } from "@/components/layout/AppShell";
 import { useApplications } from "@/lib/hooks/use-applications";
 import { useCandidates } from "@/lib/hooks/use-candidates";
 import { useJobs } from "@/lib/hooks/use-jobs";
@@ -84,6 +84,7 @@ export function ApplicationsClient() {
               <tr>
                 <th className="p-3 text-left">Candidate</th>
                 <th className="p-3 text-left">Job</th>
+                <th className="p-3 text-left">AI Score</th>
                 <th className="p-3 text-left">Stage</th>
                 <th className="p-3 text-left">Status</th>
                 <th className="p-3 text-left">Applied</th>
@@ -92,14 +93,14 @@ export function ApplicationsClient() {
             <tbody className="divide-y">
               {isLoading && (
                 <tr>
-                  <td colSpan={5} className="p-6 text-center text-sm text-muted-foreground">
+                  <td colSpan={6} className="p-6 text-center text-sm text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
               )}
               {!isLoading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="p-6 text-center text-sm text-muted-foreground">
+                  <td colSpan={6} className="p-6 text-center text-sm text-muted-foreground">
                     No applications found.
                   </td>
                 </tr>
@@ -132,6 +133,13 @@ export function ApplicationsClient() {
                       </Link>
                     ) : (
                       "—"
+                    )}
+                  </td>
+                  <td className="p-3">
+                    {typeof application.ai_score === "number" ? (
+                      <ScorePill score={Math.round(application.ai_score)} />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Pending</span>
                     )}
                   </td>
                   <td className="p-3">

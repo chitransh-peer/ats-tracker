@@ -153,6 +153,8 @@ export interface Application {
   source: string | null;
   status: string;
   applied_at: string;
+  ai_score?: number | null;
+  ai_recommendation?: string | null;
 }
 
 export interface ApplicationStageHistoryEntry {
@@ -237,6 +239,33 @@ export interface Offer {
   joining_date: string | null;
   versions: OfferVersion[];
   approvals: OfferApproval[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OnboardingTask {
+  id: string;
+  case_id: string;
+  title: string;
+  category: string;
+  status: string;
+  assignee_id: string | null;
+  due_date: string | null;
+  order_index: number;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface OnboardingCase {
+  id: string;
+  organization_id: string;
+  application_id: string;
+  status: string;
+  start_date: string | null;
+  coordinator_id: string | null;
+  notes: string | null;
+  completed_at: string | null;
+  tasks: OnboardingTask[];
   created_at: string;
   updated_at: string;
 }
@@ -355,6 +384,14 @@ export interface Template {
   body: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface AuditUserSummary {
+  actor_user_id: string | null;
+  full_name: string | null;
+  email: string | null;
+  event_count: number;
+  last_activity: string | null;
 }
 
 export interface AuditLogEntry {

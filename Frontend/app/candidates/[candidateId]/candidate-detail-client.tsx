@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { AppShell, StageBadge } from "@/components/layout/AppShell";
+import { AppShell, StageBadge, ScorePill } from "@/components/layout/AppShell";
 import { useCandidate, useCandidateNotes, useAddCandidateNote } from "@/lib/hooks/use-candidates";
 import { useApplications } from "@/lib/hooks/use-applications";
 import { useInterviews } from "@/lib/hooks/use-interviews";
@@ -344,8 +344,40 @@ export function CandidateDetailClient() {
                 AI insights
               </CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              AI-assisted resume scoring and matching is coming in a later phase.
+            <CardContent className="space-y-3">
+              {(applications ?? []).length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No applications yet — AI scoring runs automatically once this candidate applies.
+                </p>
+              )}
+              {(applications ?? []).map((app) => {
+                const job = (jobs ?? []).find((j) => j.id === app.job_id);
+                const score =
+                  typeof app.ai_score === "number" ? Math.round(app.ai_score) : null;
+                return (
+                  <div key={app.id} className="rounded-md border p-3 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium truncate">{job?.title ?? "Role"}</span>
+                      {score !== null ? (
+                        <ScorePill score={score} />
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground">Pending</span>
+                      )}
+                    </div>
+                    {app.ai_recommendation && (
+                      <div className="text-xs text-muted-foreground capitalize">
+                        {app.ai_recommendation.replace(/_/g, " ")}
+                      </div>
+                    )}
+                    <Link
+                      href={`/ai-review?applicationId=${app.id}`}
+                      className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                    >
+                      View full AI breakdown
+                    </Link>
+                  </div>
+                );
+              })}
             </CardContent>
           </Card>
         </aside>
