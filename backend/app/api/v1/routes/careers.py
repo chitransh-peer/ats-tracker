@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db_session
 from app.core.exceptions import NotFoundError
 from app.db.models.organization import Organization
-from app.schemas.careers import PublicApplyResponse, PublicJobRead
+from app.schemas.careers import PublicApplyResponse, PublicJobRead, PublicOrganizationRead
 from app.services.careers import service as careers_service
 
 router = APIRouter(prefix="/careers", tags=["careers"])
@@ -18,6 +18,12 @@ def _get_public_organization(db: Session, org_slug: str) -> Organization:
     if org is None or org.settings is None or not org.settings.careers_page_enabled:
         raise NotFoundError("Careers page not found")
     return org
+
+
+@router.get("/{org_slug}", response_model=PublicOrganizationRead)
+def get_organization(org_slug: str, db: Session = Depends(get_db_session)) -> PublicOrganizationRead:
+    org = _get_public_organization(db, org_slug)
+    return PublicOrganizationRead(name=org.name, slug=org.slug)
 
 
 @router.get("/{org_slug}/jobs", response_model=list[PublicJobRead])

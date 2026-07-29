@@ -184,10 +184,17 @@ def send_offer(db: Session, offer: Offer) -> Offer:
     return offer
 
 
-def mark_accepted(db: Session, offer: Offer) -> Offer:
+def mark_accepted(db: Session, offer: Offer, *, actor_id: uuid.UUID | None = None) -> Offer:
     if offer.status != OfferStatus.SENT.value:
         raise ValidationAppError("Only sent offers can be marked accepted")
     offer.status = OfferStatus.ACCEPTED.value
+
+    # Auto-open an onboarding case so the hire journey continues past acceptance.
+    # Imported locally to avoid a circular import between the offer and onboarding services.
+    from app.services.onboarding import service as onboarding_service
+
+    onboarding_service.open_case_for_offer(db, offer, actor_id=actor_id)
+
     db.commit()
     db.refresh(offer)
     return offer

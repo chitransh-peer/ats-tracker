@@ -7,6 +7,8 @@ from app.core.enums import CandidateDocumentType, JobStatus
 from app.core.exceptions import NotFoundError
 from app.db.models.candidate import Candidate
 from app.db.models.job import Job
+from app.services.ai.evaluation import create_pending_evaluation
+from app.services.ai.resume_parsing import create_pending_run
 from app.services.applications.service import create_application
 from app.services.candidates.service import add_document
 
@@ -71,8 +73,9 @@ def apply_to_job(
         db, organization_id=organization_id, candidate_id=candidate.id, job_id=job.id, source="Careers Page"
     )
 
+    document = None
     if resume_bytes and resume_file_name and resume_content_type:
-        add_document(
+        document = add_document(
             db,
             candidate,
             document_type=CandidateDocumentType.RESUME.value,
@@ -81,5 +84,21 @@ def apply_to_job(
             data=resume_bytes,
             uploaded_by=None,
         )
+
+    # Kick off AI review automatically so every careers-page applicant gets a score.
+    # Imported here to avoid a service<->worker import cycle at module load.
+    from app.workers.tasks.ai import evaluate_application_task, parse_resume_task
+
+    evaluation = create_pending_evaluation(
+        db, organization_id=organization_id, application_id=application.id, actor_id=None
+    )
+    if document is not None:
+        run = create_pending_run(
+            db, organization_id=organization_id, candidate_id=candidate.id, document_id=document.id
+        )
+        # Parse first, then chain evaluation once the résumé text is available.
+        parse_resume_task.send(str(run.id), str(evaluation.id))
+    else:
+        evaluate_application_task.send(str(evaluation.id))
 
     return application, candidate

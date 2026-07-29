@@ -11,6 +11,7 @@ from app.api.v1.routes import (
     interviews,
     jobs,
     offers,
+    onboarding,
     pipeline,
     reports,
     roles,
@@ -33,6 +34,7 @@ api_router.include_router(pipeline.router)
 api_router.include_router(careers.router)
 api_router.include_router(interviews.router)
 api_router.include_router(offers.router)
+api_router.include_router(onboarding.router)
 api_router.include_router(templates.router)
 api_router.include_router(reports.router)
 api_router.include_router(audit.router)

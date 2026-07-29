@@ -87,6 +87,11 @@ class AuditAction(str, enum.Enum):
     AI_EVALUATION_TRIGGERED = "ai_evaluation_triggered"
     AI_EVALUATION_OVERRIDDEN = "ai_evaluation_overridden"
     VIEW_AS_STARTED = "view_as_started"
+    ONBOARDING_CASE_OPENED = "onboarding_case_opened"
+    ONBOARDING_TASK_ADDED = "onboarding_task_added"
+    ONBOARDING_TASK_UPDATED = "onboarding_task_updated"
+    ONBOARDING_COMPLETED = "onboarding_completed"
+    ONBOARDING_CANCELLED = "onboarding_cancelled"
 
 
 class JobStatus(str, enum.Enum):
@@ -228,3 +233,24 @@ class OutboundMessageStatus(str, enum.Enum):
     LOGGED = "logged"
     SENT = "sent"
     FAILED = "failed"
+
+
+class OnboardingStatus(str, enum.Enum):
+    IN_PROGRESS = "In Progress"
+    COMPLETED = "Completed"
+    CANCELLED = "Cancelled"
+
+
+class OnboardingTaskStatus(str, enum.Enum):
+    PENDING = "Pending"
+    IN_PROGRESS = "In Progress"
+    COMPLETED = "Completed"
+    BLOCKED = "Blocked"
+
+
+class OnboardingTaskCategory(str, enum.Enum):
+    DOCUMENTATION = "Documentation"
+    COMPLIANCE = "Compliance"
+    EQUIPMENT = "Equipment"
+    PROVISIONING = "Provisioning"
+    ORIENTATION = "Orientation"

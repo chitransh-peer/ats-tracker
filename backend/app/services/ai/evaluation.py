@@ -157,6 +157,33 @@ def _latest_parsed_resume(db: Session, candidate_id: uuid.UUID) -> ParsedResume 
     )
 
 
+def latest_scores(
+    db: Session, organization_id: uuid.UUID, application_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, tuple[float | None, str | None]]:
+    """Latest AI overall_score + recommendation per application, for list columns."""
+    if not application_ids:
+        return {}
+    rows = db.execute(
+        select(
+            AIEvaluation.application_id,
+            AIEvaluation.overall_score,
+            AIEvaluation.recommendation_label,
+            AIEvaluation.version,
+        )
+        .where(
+            AIEvaluation.organization_id == organization_id,
+            AIEvaluation.application_id.in_(application_ids),
+        )
+        .order_by(AIEvaluation.application_id, AIEvaluation.version.desc())
+    ).all()
+    result: dict[uuid.UUID, tuple[float | None, str | None]] = {}
+    for row in rows:
+        if row.application_id not in result:
+            score = float(row.overall_score) if row.overall_score is not None else None
+            result[row.application_id] = (score, row.recommendation_label)
+    return result
+
+
 def create_pending_evaluation(
     db: Session, *, organization_id: uuid.UUID, application_id: uuid.UUID, actor_id: uuid.UUID | None
 ) -> AIEvaluation:

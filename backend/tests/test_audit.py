@@ -1,8 +1,8 @@
 from app.core.enums import RoleName
 
 
-def test_admin_can_read_audit_logs(client, make_user, auth_headers):
-    user, password = make_user(role_names=[RoleName.ADMIN.value])
+def test_super_admin_can_read_audit_logs(client, make_user, auth_headers):
+    user, password = make_user(role_names=[RoleName.SUPER_ADMIN.value])
     headers = auth_headers(user.email, password)
     client.post(
         "/api/v1/jobs",
@@ -14,6 +14,31 @@ def test_admin_can_read_audit_logs(client, make_user, auth_headers):
 
     assert response.status_code == 200
     assert any(entry["action"] == "job_created" for entry in response.json())
+
+
+def test_super_admin_can_read_per_user_audit_summary(client, make_user, auth_headers):
+    user, password = make_user(role_names=[RoleName.SUPER_ADMIN.value])
+    headers = auth_headers(user.email, password)
+    client.post(
+        "/api/v1/jobs",
+        json={"title": "Summary Job", "workplace": "Remote", "employment_type": "Full-time"},
+        headers=headers,
+    )
+
+    response = client.get("/api/v1/audit-logs/by-user", headers=headers)
+
+    assert response.status_code == 200
+    summary = response.json()
+    assert any(row["actor_user_id"] == str(user.id) and row["event_count"] >= 1 for row in summary)
+
+
+def test_admin_cannot_read_audit_logs(client, make_user, auth_headers):
+    user, password = make_user(role_names=[RoleName.ADMIN.value])
+    headers = auth_headers(user.email, password)
+
+    response = client.get("/api/v1/audit-logs", headers=headers)
+
+    assert response.status_code == 403
 
 
 def test_recruiter_cannot_read_audit_logs(client, make_user, auth_headers):

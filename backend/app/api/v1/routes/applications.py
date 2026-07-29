@@ -6,7 +6,12 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db_session, require_permission
 from app.core.enums import AuditAction, PermissionAction, PermissionResource
 from app.schemas.ai import AIEvaluationRead
-from app.schemas.application import ApplicationCreate, ApplicationRead, ApplicationStageHistoryRead
+from app.schemas.application import (
+    ApplicationCreate,
+    ApplicationListItem,
+    ApplicationRead,
+    ApplicationStageHistoryRead,
+)
 from app.schemas.auth import CurrentUser
 from app.schemas.pipeline import MoveStageRequest, StageActionRequest
 from app.services.ai import evaluation as ai_evaluation_service
@@ -17,17 +22,28 @@ from app.services.pipeline import service as pipeline_service
 router = APIRouter(prefix="/applications", tags=["applications"])
 
 
-@router.get("", response_model=list[ApplicationRead])
+@router.get("", response_model=list[ApplicationListItem])
 def list_applications(
     job_id: uuid.UUID | None = None,
     candidate_id: uuid.UUID | None = None,
     status: str | None = None,
     current_user: CurrentUser = Depends(require_permission(PermissionResource.APPLICATION, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
-) -> list[ApplicationRead]:
-    return application_service.list_applications(
+) -> list[ApplicationListItem]:
+    applications = application_service.list_applications(
         db, current_user.organization_id, job_id=job_id, candidate_id=candidate_id, status=status, viewer=current_user
     )
+    scores = ai_evaluation_service.latest_scores(
+        db, current_user.organization_id, [a.id for a in applications]
+    )
+    items: list[ApplicationListItem] = []
+    for application in applications:
+        score, recommendation = scores.get(application.id, (None, None))
+        item = ApplicationListItem.model_validate(application)
+        item.ai_score = score
+        item.ai_recommendation = recommendation
+        items.append(item)
+    return items
 
 
 @router.post("", response_model=ApplicationRead, status_code=201)

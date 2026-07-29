@@ -1,9 +1,10 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models.audit_log import AuditLog
+from app.db.models.user import User
 
 
 def record(
@@ -49,3 +50,34 @@ def list_logs(
         query = query.where(AuditLog.actor_user_id == actor_user_id)
     query = query.order_by(AuditLog.created_at.desc()).limit(limit)
     return list(db.scalars(query).all())
+
+
+def summarize_by_user(db: Session, organization_id: uuid.UUID) -> list[dict]:
+    """One row per actor: their identity plus event count and last activity.
+
+    Powers the per-user audit view so each user's trail can be inspected in
+    isolation rather than as one undifferentiated org-wide stream.
+    """
+    rows = db.execute(
+        select(
+            AuditLog.actor_user_id,
+            User.full_name,
+            User.email,
+            func.count(AuditLog.id).label("event_count"),
+            func.max(AuditLog.created_at).label("last_activity"),
+        )
+        .join(User, User.id == AuditLog.actor_user_id, isouter=True)
+        .where(AuditLog.organization_id == organization_id)
+        .group_by(AuditLog.actor_user_id, User.full_name, User.email)
+        .order_by(func.max(AuditLog.created_at).desc())
+    ).all()
+    return [
+        {
+            "actor_user_id": row.actor_user_id,
+            "full_name": row.full_name,
+            "email": row.email,
+            "event_count": row.event_count,
+            "last_activity": row.last_activity,
+        }
+        for row in rows
+    ]

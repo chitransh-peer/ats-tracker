@@ -25,6 +25,13 @@ class PublicJobRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PublicOrganizationRead(BaseModel):
+    name: str
+    slug: str
+
+    model_config = {"from_attributes": True}
+
+
 class PublicApplyResponse(BaseModel):
     application_id: uuid.UUID
     candidate_id: uuid.UUID

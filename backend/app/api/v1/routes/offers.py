@@ -166,7 +166,17 @@ def accept_offer(
     db: Session = Depends(get_db_session),
 ) -> OfferRead:
     offer = offer_service.get_offer(db, current_user.organization_id, offer_id, viewer=current_user)
-    return offer_service.mark_accepted(db, offer)
+    offer = offer_service.mark_accepted(db, offer, actor_id=current_user.id)
+    record_audit(
+        db,
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action=AuditAction.ONBOARDING_CASE_OPENED.value,
+        resource_type="offer",
+        resource_id=str(offer.id),
+    )
+    db.commit()
+    return offer
 
 
 @router.post("/{offer_id}/decline", response_model=OfferRead)

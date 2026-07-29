@@ -16,6 +16,7 @@ from app.db.models.interview import Interview, InterviewFeedback, InterviewPanel
 from app.db.models.invitation import Invitation
 from app.db.models.job import Job
 from app.db.models.offer import Offer, OfferApproval, OfferVersion
+from app.db.models.onboarding import OnboardingCase, OnboardingTask
 from app.db.models.organization import Organization, OrganizationSettings
 from app.db.models.password_reset_token import PasswordResetToken
 from app.db.models.pipeline_stage import StageTemplate, StageTemplateStage
@@ -58,6 +59,8 @@ __all__ = [
     "Offer",
     "OfferVersion",
     "OfferApproval",
+    "OnboardingCase",
+    "OnboardingTask",
     "CommunicationTemplate",
     "OutboundMessage",
     "ResumeParseRun",

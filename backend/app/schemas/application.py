@@ -23,6 +23,11 @@ class ApplicationRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ApplicationListItem(ApplicationRead):
+    ai_score: float | None = None
+    ai_recommendation: str | None = None
+
+
 class ApplicationStageHistoryRead(BaseModel):
     id: uuid.UUID
     from_stage_id: uuid.UUID | None

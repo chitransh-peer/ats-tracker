@@ -18,3 +18,12 @@ class RoleRead(BaseModel):
     permissions: list[PermissionRead]
 
     model_config = {"from_attributes": True}
+
+
+class PermissionGrant(BaseModel):
+    resource: str
+    action: str
+
+
+class RolePermissionsUpdate(BaseModel):
+    permissions: list[PermissionGrant]

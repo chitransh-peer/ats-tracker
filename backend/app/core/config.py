@@ -32,8 +32,8 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:3000"
 
-    default_org_name: str = "ATS Tracker"
-    default_org_slug: str = "ats-tracker"
+    default_org_name: str = "Peer Consulting Resources Inc."
+    default_org_slug: str = "peer-consulting"
     default_super_admin_email: str = "admin@ats-tracker.local"
     default_super_admin_password: str = "change-me"
 

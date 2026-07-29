@@ -46,6 +46,9 @@ _RECRUITER_OPERATIONAL: set[Permission] = {
     (PermissionResource.OFFER, PermissionAction.CREATE),
     (PermissionResource.OFFER, PermissionAction.READ),
     (PermissionResource.OFFER, PermissionAction.UPDATE),
+    (PermissionResource.ONBOARDING, PermissionAction.CREATE),
+    (PermissionResource.ONBOARDING, PermissionAction.READ),
+    (PermissionResource.ONBOARDING, PermissionAction.UPDATE),
     (PermissionResource.TEMPLATE, PermissionAction.READ),
     (PermissionResource.TEMPLATE, PermissionAction.CREATE),
     (PermissionResource.CLIENT, PermissionAction.READ),
@@ -63,6 +66,7 @@ _HIRING_MANAGER_JOB_SCOPED: set[Permission] = {
     (PermissionResource.INTERVIEW, PermissionAction.UPDATE),
     (PermissionResource.OFFER, PermissionAction.READ),
     (PermissionResource.OFFER, PermissionAction.CREATE),
+    (PermissionResource.ONBOARDING, PermissionAction.READ),
 }
 
 _INTERVIEWER_SCOPED: set[Permission] = {
