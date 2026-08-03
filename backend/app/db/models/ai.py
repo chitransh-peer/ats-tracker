@@ -77,6 +77,7 @@ class AIEvaluation(TimestampMixin, Base):
     risk_flags: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     matched_skills: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     missing_skills: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
+    criteria: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)
     suggested_interview_questions: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     confidence: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
     explanation_text: Mapped[str | None] = mapped_column(Text, nullable=True)

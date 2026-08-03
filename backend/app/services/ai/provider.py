@@ -39,6 +39,9 @@ def _call_openrouter(prompt: str) -> str:
                 "model": settings.openrouter_model,
                 "messages": [{"role": "user", "content": prompt}],
                 "response_format": {"type": "json_object"},
+                # Enough room to grade every requirement without rambling.
+                "max_tokens": 1400,
+                "temperature": 0.2,
             },
             timeout=_TIMEOUT_SECONDS,
         )

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.enums import ResumeParseStatus
 from app.core.exceptions import NotFoundError
 from app.db.models.ai import ParsedResume, ResumeParseRun
-from app.db.models.candidate import CandidateDocument
+from app.db.models.candidate import Candidate, CandidateDocument
 from app.services.ai.provider import AIProviderError, current_model_name, generate_structured
 from app.services.storage.service import download_bytes
 
@@ -94,6 +94,23 @@ def parse_resume(db: Session, run: ResumeParseRun) -> ResumeParseRun:
         )
         run.status = ResumeParseStatus.COMPLETED.value
         run.model_name = current_model_name()
+
+        # Backfill the candidate's structured fields from the résumé when they're
+        # empty (e.g. careers-page applicants who only submitted a résumé), so the
+        # candidate record and downstream skill matching aren't left blank.
+        candidate = db.get(Candidate, run.candidate_id)
+        if candidate is not None:
+            parsed_skills = fields.get("skills") or []
+            if not candidate.skills and parsed_skills:
+                candidate.skills = parsed_skills
+            if candidate.total_experience_years is None and fields.get("total_experience_years") is not None:
+                candidate.total_experience_years = fields.get("total_experience_years")
+            if not candidate.location and fields.get("location"):
+                candidate.location = fields.get("location")
+            if not candidate.current_title and fields.get("work_history"):
+                first = fields["work_history"][0]
+                if isinstance(first, dict) and first.get("title"):
+                    candidate.current_title = first.get("title")
     except AIProviderError as exc:
         # Rule-based flows (skill matching) don't need parsed fields, so keep the
         # raw text available even when the AI extraction step itself failed.

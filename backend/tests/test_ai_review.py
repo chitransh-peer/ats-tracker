@@ -1,6 +1,13 @@
 import pytest
 
+from app.core.config import get_settings
 from app.core.enums import AIEvaluationStatus, CandidateDocumentType, RoleName
+
+_W = get_settings().evaluation_skill_weight  # skill vs semantic blend weight
+
+
+def _blend(skill: float, semantic: float) -> float:
+    return _W * skill + (1 - _W) * semantic
 from app.db.models.ai import AIEvaluationOverride
 from app.services.ai import evaluation as evaluation_service
 from app.services.ai import resume_parsing as resume_parsing_service
@@ -40,6 +47,8 @@ def test_evaluate_application_falls_back_to_rule_score_when_ai_unavailable(
         raise AIProviderError("provider not configured")
 
     monkeypatch.setattr(evaluation_service, "generate_structured", _raise)
+    # Isolate this test from whatever EMBEDDINGS_ENABLED is set to in the env.
+    monkeypatch.setattr(evaluation_service, "embedding_similarity", lambda *_a, **_k: None)
 
     job = make_job(required_skills=["Python"], nice_to_have=[])
     candidate = make_candidate(skills=["Python"])
@@ -62,6 +71,8 @@ def test_evaluate_application_blends_semantic_score_when_ai_succeeds(
     db, make_job, make_candidate, make_application, monkeypatch
 ):
     monkeypatch.setattr(evaluation_service, "generate_structured", _canned_semantic_response)
+    # This test asserts the LLM's own match_score is used, so disable embeddings.
+    monkeypatch.setattr(evaluation_service, "embedding_similarity", lambda *_a, **_k: None)
 
     job = make_job(required_skills=["Python"], nice_to_have=[])
     candidate = make_candidate(skills=["Python"])
@@ -74,9 +85,56 @@ def test_evaluate_application_blends_semantic_score_when_ai_succeeds(
 
     assert evaluation.status == AIEvaluationStatus.COMPLETED.value
     assert evaluation.semantic_score == 70
-    assert evaluation.overall_score == pytest.approx(0.6 * 100 + 0.4 * 70, abs=0.01)
+    assert evaluation.overall_score == pytest.approx(_blend(100, 70), abs=0.01)
     assert evaluation.strengths == ["Strong Python background"]
     assert evaluation.error_message is None
+
+
+def test_embedding_and_llm_scores_are_averaged_when_both_available(
+    db, make_job, make_candidate, make_application, monkeypatch
+):
+    monkeypatch.setattr(evaluation_service, "generate_structured", _canned_semantic_response)
+    # Simulate embeddings enabled + a deterministic cosine result of 80.
+    monkeypatch.setattr(evaluation_service, "embedding_similarity", lambda *_a, **_k: 80.0)
+
+    job = make_job(required_skills=["Python"], nice_to_have=[])
+    candidate = make_candidate(skills=["Python"])
+    application = make_application(candidate=candidate, job=job)
+
+    evaluation = evaluation_service.create_pending_evaluation(
+        db, organization_id=application.organization_id, application_id=application.id, actor_id=None
+    )
+    evaluation = evaluation_service.evaluate_application(db, evaluation)
+
+    # Semantic = average of embedding (80) and the LLM's match_score (70) = 75.
+    assert evaluation.semantic_score == pytest.approx(75.0, abs=0.01)
+    assert evaluation.overall_score == pytest.approx(_blend(100, 75), abs=0.01)
+    # Narrative still comes from the LLM.
+    assert evaluation.strengths == ["Strong Python background"]
+
+
+def test_embedding_score_used_even_when_llm_unavailable(
+    db, make_job, make_candidate, make_application, monkeypatch
+):
+    def _raise(*_args, **_kwargs):
+        raise AIProviderError("provider not configured")
+
+    monkeypatch.setattr(evaluation_service, "generate_structured", _raise)
+    monkeypatch.setattr(evaluation_service, "embedding_similarity", lambda *_a, **_k: 50.0)
+
+    job = make_job(required_skills=["Python"], nice_to_have=[])
+    candidate = make_candidate(skills=["Python"])
+    application = make_application(candidate=candidate, job=job)
+
+    evaluation = evaluation_service.create_pending_evaluation(
+        db, organization_id=application.organization_id, application_id=application.id, actor_id=None
+    )
+    evaluation = evaluation_service.evaluate_application(db, evaluation)
+
+    assert evaluation.status == AIEvaluationStatus.COMPLETED.value
+    assert evaluation.semantic_score == 50.0
+    assert evaluation.overall_score == pytest.approx(_blend(100, 50), abs=0.01)
+    assert evaluation.error_message is not None  # LLM failure is still recorded
 
 
 def test_override_preserves_original_recommendation(db, make_job, make_candidate, make_application, monkeypatch):

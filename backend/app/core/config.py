@@ -30,6 +30,19 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_model: str = ""
 
+    # Local sentence-transformers embeddings for deterministic JD<->resume semantic
+    # scoring. Off by default; when enabled it replaces the LLM's numeric match
+    # guess with an embedding cosine similarity (the LLM still writes the narrative).
+    embeddings_enabled: bool = False
+    embeddings_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # Persisted so the model downloads once and survives container recreation.
+    embeddings_cache_dir: str = "/app/.model_cache"
+
+    # Weight of the skill/requirement fit vs. the holistic semantic understanding
+    # in the overall AI match score. Lower it to reward strong generalists whose
+    # résumé fits the role even when they miss niche must-have tags. Range 0-1.
+    evaluation_skill_weight: float = 0.6
+
     cors_origins: str = "http://localhost:3000"
 
     default_org_name: str = "Peer Consulting Resources Inc."

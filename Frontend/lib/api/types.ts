@@ -302,6 +302,7 @@ export interface AIEvaluation {
   risk_flags: string[];
   matched_skills: string[];
   missing_skills: string[];
+  criteria: JDCriterion[];
   suggested_interview_questions: string[];
   confidence: number | null;
   explanation_text: string | null;

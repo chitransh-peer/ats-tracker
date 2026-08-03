@@ -54,40 +54,50 @@ function formatRoleLabel(role: string) {
   return role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-const nav = [
-  { section: "Overview", items: [{ to: "/", label: "Dashboard", icon: LayoutDashboard }] },
+// Role visibility per nav item, mirroring the backend permission matrix so the
+// sidebar only shows what a role can actually use. `roles: undefined` = everyone.
+const ALL_INTERNAL = ["super_admin", "admin", "executive", "recruiter", "hiring_manager", "interviewer"];
+const CORE = ["super_admin", "admin", "executive", "recruiter", "hiring_manager"];
+const OPS = ["super_admin", "admin", "executive", "recruiter"];
+const ADMIN_ONLY = ["super_admin", "admin"];
+
+type NavItem = { to: string; label: string; icon: typeof LayoutDashboard; roles?: string[] };
+type NavSection = { section: string; items: NavItem[] };
+
+const nav: NavSection[] = [
+  { section: "Overview", items: [{ to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ALL_INTERNAL }] },
   {
     section: "Hiring",
     items: [
-      { to: "/jobs", label: "Jobs", icon: Briefcase },
-      { to: "/applications", label: "Applications", icon: FileText },
-      { to: "/candidates", label: "Candidates", icon: Users },
-      { to: "/talent-pool", label: "Talent Pool", icon: UserPlus },
-      { to: "/pipeline", label: "Pipeline", icon: GitBranch },
-      { to: "/interviews", label: "Interviews", icon: Calendar },
-      { to: "/offers", label: "Offers", icon: FileSignature },
-      { to: "/onboarding", label: "Onboarding", icon: ClipboardCheck },
+      { to: "/jobs", label: "Jobs", icon: Briefcase, roles: CORE },
+      { to: "/applications", label: "Applications", icon: FileText, roles: ALL_INTERNAL },
+      { to: "/candidates", label: "Candidates", icon: Users, roles: ALL_INTERNAL },
+      { to: "/talent-pool", label: "Talent Pool", icon: UserPlus, roles: ALL_INTERNAL },
+      { to: "/pipeline", label: "Pipeline", icon: GitBranch, roles: CORE },
+      { to: "/interviews", label: "Interviews", icon: Calendar, roles: ALL_INTERNAL },
+      { to: "/offers", label: "Offers", icon: FileSignature, roles: CORE },
+      { to: "/onboarding", label: "Onboarding", icon: ClipboardCheck, roles: CORE },
     ],
   },
   {
     section: "AI",
-    items: [{ to: "/ai-review", label: "AI Review", icon: Sparkles }],
+    items: [{ to: "/ai-review", label: "AI Review", icon: Sparkles, roles: CORE }],
   },
   {
     section: "Business",
     items: [
-      { to: "/clients", label: "Clients", icon: Building2 },
-      { to: "/vendors", label: "Vendors", icon: Truck },
-      { to: "/reports", label: "Reports", icon: BarChart3 },
-      { to: "/templates", label: "Templates", icon: Mail },
+      { to: "/clients", label: "Clients", icon: Building2, roles: OPS },
+      { to: "/vendors", label: "Vendors", icon: Truck, roles: OPS },
+      { to: "/reports", label: "Reports", icon: BarChart3, roles: OPS },
+      { to: "/templates", label: "Templates", icon: Mail, roles: OPS },
     ],
   },
   {
     section: "System",
     items: [
-      { to: "/careers", label: "Careers Portal", icon: Globe },
-      { to: "/admin", label: "Admin", icon: Shield },
-      { to: "/settings", label: "Settings", icon: Settings },
+      { to: "/careers", label: "Careers Portal", icon: Globe, roles: OPS },
+      { to: "/admin", label: "Admin", icon: Shield, roles: ADMIN_ONLY },
+      { to: "/settings", label: "Settings", icon: Settings, roles: ADMIN_ONLY },
     ],
   },
 ];
@@ -130,6 +140,15 @@ export function AppShell({
   const isRealSuperAdmin = user.roles.includes("super_admin");
   const roleLabel = viewAsRole ? formatRoleLabel(viewAsRole) : (user.roles[0] ? formatRoleLabel(user.roles[0]) : "Member");
 
+  // When previewing via "View as", the sidebar reflects the previewed role only.
+  const effectiveRoles = viewAsRole ? [viewAsRole] : user.roles;
+  const visibleNav = nav
+    .map((sec) => ({
+      ...sec,
+      items: sec.items.filter((it) => !it.roles || it.roles.some((r) => effectiveRoles.includes(r))),
+    }))
+    .filter((sec) => sec.items.length > 0);
+
   return (
     <div className="flex min-h-screen w-full bg-background">
       {/* Sidebar */}
@@ -146,7 +165,7 @@ export function AppShell({
           </div>
         </div>
         <nav className="flex-1 overflow-y-auto py-3">
-          {nav.map((sec) => (
+          {visibleNav.map((sec) => (
             <div key={sec.section} className="px-3 mb-4">
               <div className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/50">
                 {sec.section}

@@ -5,12 +5,14 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.enums import AIEvaluationStatus, AIRecommendationLabel
 from app.core.exceptions import NotFoundError, ValidationAppError
 from app.db.models.ai import AIEvaluation, AIEvaluationOverride, ParsedResume, ResumeParseRun
 from app.db.models.application import Application
 from app.db.models.candidate import Candidate
 from app.db.models.job import Job
+from app.services.ai.embeddings import embedding_similarity
 from app.services.ai.provider import AIProviderError, current_model_name, generate_structured
 
 _SKILL_BUDGET = 80.0
@@ -22,7 +24,19 @@ fences) with these exact keys: recommendation_label (one of "strong_fit", "fit",
 "partial_fit", "not_a_fit"), match_score (number 0-100, your own independent estimate), \
 strengths (array of short strings), gaps (array of short strings), risk_flags (array of short \
 strings), confidence (number 0-100), explanation_text (2-3 sentence summary for a recruiter), \
-suggested_interview_questions (array of 2-4 strings).
+suggested_interview_questions (array of 2-4 strings), criteria (array with ONE object per \
+must-have skill and per nice-to-have skill listed below; each object has keys: requirement \
+(copy the skill text exactly), score (number 0-100), comment (one short phrase citing \
+evidence from the résumé)). SCORING RULES for each requirement's score: 90-100 = direct, \
+explicit experience with the exact tool/skill; 60-89 = strong adjacent, transferable, or \
+domain-equivalent experience even if the exact term is absent (e.g. E911/public-safety comms \
+counts strongly toward NG911; dispatch/AVTEC counts toward CAD); 30-59 = some related \
+foundation but a clear gap; 0-29 = no related experience at all. Reward transferable \
+experience the way an expert recruiter would — do not require exact keyword matches.), \
+general_competencies (array of 3-6 objects capturing broad role fit BEYOND the listed skills — \
+e.g. "Overall QA experience", "Test automation", "Domain/industry experience", "Documentation & \
+reporting"; each object has keys: competency (short name), score (0-100 by the same scoring \
+rules), comment (evidence from the résumé)).
 
 Job: {job_title}
 Job description: {job_description}
@@ -35,7 +49,16 @@ Current title: {candidate_title}
 Skills: {candidate_skills}
 Total experience (years): {candidate_experience}
 Location: {candidate_location}
+
+Candidate résumé (verbatim extract — treat this as the primary source of truth \
+and infer skills/experience from it even if the fields above are blank):
+{candidate_resume}
 """
+
+# Cap résumé text fed to the LLM. Kept generous because truncating too early
+# hides later-page evidence (a candidate's most relevant experience is often
+# below the fold), which makes the model under-credit real matches.
+_RESUME_CHAR_LIMIT = 12000
 
 
 @dataclass
@@ -77,8 +100,31 @@ def _candidate_experience_years(candidate: Candidate, parsed_resume: ParsedResum
     return None
 
 
+def _skill_present(skill: str, candidate_skill_set: set[str], raw_text: str) -> bool:
+    """True if the skill is in the structured skill list OR evidenced in the
+    résumé text. The résumé-text fallback rescues scoring when the LLM skill
+    extraction returns nothing (which is common), so a strong résumé is no longer
+    graded as all-"Missing"."""
+    s = skill.strip().lower()
+    if not s:
+        return False
+    if s in candidate_skill_set:
+        return True
+    if not raw_text:
+        return False
+    if s in raw_text:
+        return True
+    # Multi-word skills (e.g. "Computer Aided Dispatch (CAD)") rarely appear
+    # verbatim; credit them when all meaningful tokens appear as whole words.
+    tokens = [t for t in re.split(r"[^a-z0-9]+", s) if len(t) >= 3]
+    if tokens and all(re.search(rf"\b{re.escape(t)}\b", raw_text) for t in tokens):
+        return True
+    return False
+
+
 def rule_based_score(job: Job, candidate: Candidate, parsed_resume: ParsedResume | None) -> RuleScoreResult:
     candidate_skill_set = {s.strip().lower() for s in _candidate_skills(candidate, parsed_resume)}
+    raw_text = (parsed_resume.raw_text or "").lower() if parsed_resume and parsed_resume.raw_text else ""
     required = job.required_skills or []
     nice_to_have = job.nice_to_have or []
 
@@ -97,7 +143,7 @@ def rule_based_score(job: Job, candidate: Candidate, parsed_resume: ParsedResume
 
     for skill in required:
         weight = required_budget / len(required)
-        is_match = skill.strip().lower() in candidate_skill_set
+        is_match = _skill_present(skill, candidate_skill_set, raw_text)
         criteria.append(
             Criterion("Required Skill", skill, round(weight, 2), skill if is_match else "—",
                       "Matched" if is_match else "Missing", weight if is_match else 0.0)
@@ -106,7 +152,7 @@ def rule_based_score(job: Job, candidate: Candidate, parsed_resume: ParsedResume
 
     for skill in nice_to_have:
         weight = nice_budget / len(nice_to_have)
-        is_match = skill.strip().lower() in candidate_skill_set
+        is_match = _skill_present(skill, candidate_skill_set, raw_text)
         criteria.append(
             Criterion("Nice to Have", skill, round(weight, 2), skill if is_match else "—",
                       "Matched" if is_match else "Missing", weight if is_match else 0.0)
@@ -128,6 +174,93 @@ def rule_based_score(job: Job, candidate: Candidate, parsed_resume: ParsedResume
 
     return RuleScoreResult(total_score=total_score, criteria=criteria, matched_skills=matched_skills,
                             missing_skills=missing_skills)
+
+
+def _job_text(job: Job) -> str:
+    return " ".join(
+        part
+        for part in [
+            job.title,
+            job.summary,
+            job.description,
+            ", ".join(job.required_skills or []),
+            ", ".join(job.nice_to_have or []),
+            job.experience,
+        ]
+        if part
+    )
+
+
+def _candidate_text(candidate: Candidate, parsed_resume: ParsedResume | None) -> str:
+    parts = [candidate.current_title, ", ".join(_candidate_skills(candidate, parsed_resume))]
+    if parsed_resume and parsed_resume.raw_text:
+        parts.append(parsed_resume.raw_text)
+    return " ".join(part for part in parts if part)
+
+
+# Weight given to each general role competency row (comparable to a required skill),
+# so broad role fit meaningfully contributes alongside the JD's specific skills.
+_COMPETENCY_WEIGHT = 15.0
+
+
+def _status_from_pct(pct: float) -> str:
+    return "Matched" if pct >= 70 else "Partial" if pct >= 30 else "Missing"
+
+
+def _build_display_criteria(
+    rule_result: "RuleScoreResult", llm_criteria: list, general_competencies: list
+) -> list[dict]:
+    """Build the graded comparison rows: the JD's per-requirement grades (partial
+    credit + evidence) plus broad general-competency rows that credit role fit
+    beyond the listed skills, mirroring how an expert recruiter (or ChatGPT) reads
+    a résumé. Falls back to the deterministic rule values when the LLM didn't grade."""
+    graded = {
+        str(c.get("requirement", "")).strip().lower(): c
+        for c in (llm_criteria or [])
+        if isinstance(c, dict)
+    }
+    rows: list[dict] = []
+    for c in rule_result.criteria:
+        row = {
+            "type": c.type,
+            "requirement": c.requirement,
+            "weight": round(c.weight, 2),
+            "candidate_value": c.candidate_value,
+            "status": c.status,
+            "score": round(c.score, 2),
+        }
+        g = graded.get(c.requirement.strip().lower())
+        if g is not None and isinstance(g.get("score"), (int, float)):
+            pct = max(0.0, min(100.0, float(g["score"])))
+            row["score"] = round(c.weight * pct / 100, 2)
+            row["status"] = _status_from_pct(pct)
+            if g.get("comment"):
+                row["candidate_value"] = str(g["comment"])
+        rows.append(row)
+
+    for gc in general_competencies or []:
+        if not isinstance(gc, dict) or not isinstance(gc.get("score"), (int, float)):
+            continue
+        pct = max(0.0, min(100.0, float(gc["score"])))
+        rows.append(
+            {
+                "type": "Competency",
+                "requirement": str(gc.get("competency", "")).strip() or "Competency",
+                "weight": _COMPETENCY_WEIGHT,
+                "candidate_value": str(gc.get("comment", "")),
+                "status": _status_from_pct(pct),
+                "score": round(_COMPETENCY_WEIGHT * pct / 100, 2),
+            }
+        )
+    return rows
+
+
+def _score_from_criteria(rows: list[dict]) -> float:
+    """Weighted total (0-100) across all graded rows — this is both the table's
+    total and the skill/fit component of the overall score, so the two agree."""
+    total_weight = sum(r["weight"] for r in rows)
+    total_score = sum(r["score"] for r in rows)
+    return round(total_score / total_weight * 100, 2) if total_weight > 0 else 0.0
 
 
 def _recommendation_from_score(score: float) -> str:
@@ -225,6 +358,10 @@ def evaluate_application(db: Session, evaluation: AIEvaluation) -> AIEvaluation:
     evaluation.matched_skills = rule_result.matched_skills
     evaluation.missing_skills = rule_result.missing_skills
 
+    # Deterministic local semantic signal. Returns None when embeddings are
+    # disabled/unavailable, in which case the LLM's match_score is used instead.
+    embed_score = embedding_similarity(_job_text(job), _candidate_text(candidate, parsed_resume))
+
     try:
         prompt = _SEMANTIC_PROMPT.format(
             job_title=job.title,
@@ -236,10 +373,25 @@ def evaluate_application(db: Session, evaluation: AIEvaluation) -> AIEvaluation:
             candidate_skills=", ".join(_candidate_skills(candidate, parsed_resume)),
             candidate_experience=_candidate_experience_years(candidate, parsed_resume) or "Unknown",
             candidate_location=candidate.location or "Unknown",
+            candidate_resume=(parsed_resume.raw_text or "").strip()[:_RESUME_CHAR_LIMIT]
+            if parsed_resume and parsed_resume.raw_text
+            else "No résumé text available.",
         )
         fields = generate_structured(prompt)
 
-        evaluation.semantic_score = fields.get("match_score")
+        # Semantic signal combines two views when both exist: the deterministic
+        # embedding similarity and the LLM's résumé-informed match_score. Averaging
+        # keeps the reproducible backbone while crediting the LLM's holistic read
+        # (it now sees the full résumé), which is what closes the gap with tools
+        # like ChatGPT on strong-but-differently-worded résumés.
+        raw_match = fields.get("match_score")
+        llm_score = float(raw_match) if isinstance(raw_match, (int, float)) else None
+        if embed_score is not None and llm_score is not None:
+            evaluation.semantic_score = round((embed_score + llm_score) / 2, 2)
+        elif embed_score is not None:
+            evaluation.semantic_score = embed_score
+        else:
+            evaluation.semantic_score = llm_score
         evaluation.recommendation_label = fields.get("recommendation_label") or _recommendation_from_score(
             rule_result.total_score
         )
@@ -250,12 +402,30 @@ def evaluate_application(db: Session, evaluation: AIEvaluation) -> AIEvaluation:
         evaluation.confidence = fields.get("confidence")
         evaluation.explanation_text = fields.get("explanation_text")
         evaluation.model_name = current_model_name()
-        evaluation.overall_score = round(0.6 * rule_result.total_score + 0.4 * float(evaluation.semantic_score), 2) \
-            if evaluation.semantic_score is not None else rule_result.total_score
+
+        # Skill/fit component: prefer the LLM's per-requirement graded score
+        # (partial credit) over the binary text-match rule score when available.
+        rows = _build_display_criteria(
+            rule_result, fields.get("criteria") or [], fields.get("general_competencies") or []
+        )
+        evaluation.criteria = rows
+        skill_component = _score_from_criteria(rows) if rows else rule_result.total_score
+        w = get_settings().evaluation_skill_weight
+        evaluation.overall_score = round(w * skill_component + (1 - w) * float(evaluation.semantic_score), 2) \
+            if evaluation.semantic_score is not None else skill_component
     except AIProviderError as exc:
+        # The LLM narrative is unavailable, but a local embedding score can still
+        # give a semantic signal on top of the rule score.
         evaluation.error_message = str(exc)
-        evaluation.overall_score = rule_result.total_score
-        evaluation.recommendation_label = _recommendation_from_score(rule_result.total_score)
+        evaluation.criteria = _build_display_criteria(rule_result, [], [])
+        if embed_score is not None:
+            w = get_settings().evaluation_skill_weight
+            evaluation.semantic_score = embed_score
+            evaluation.overall_score = round(w * rule_result.total_score + (1 - w) * embed_score, 2)
+            evaluation.recommendation_label = _recommendation_from_score(evaluation.overall_score)
+        else:
+            evaluation.overall_score = rule_result.total_score
+            evaluation.recommendation_label = _recommendation_from_score(rule_result.total_score)
 
     evaluation.status = AIEvaluationStatus.COMPLETED.value
     db.commit()

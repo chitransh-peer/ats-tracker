@@ -57,6 +57,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
+      - model_cache:/app/.model_cache
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   worker:
@@ -70,6 +71,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
+      - model_cache:/app/.model_cache
     command: dramatiq app.workers.tasks
 
   frontend:
@@ -88,3 +90,4 @@ volumes:
   postgres_data:
   minio_data:
   frontend_node_modules:
+  model_cache:

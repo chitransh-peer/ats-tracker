@@ -53,6 +53,7 @@ class AIEvaluationRead(BaseModel):
     risk_flags: list[str]
     matched_skills: list[str]
     missing_skills: list[str]
+    criteria: list[dict] = []
     suggested_interview_questions: list[str]
     confidence: float | None
     explanation_text: str | None

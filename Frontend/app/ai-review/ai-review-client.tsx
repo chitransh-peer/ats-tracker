@@ -110,6 +110,19 @@ export function AIReviewClient() {
   ].filter((d) => d.value > 0);
   const colors = ["#10b981", "#ef4444"];
 
+  // Prefer the AI's graded per-requirement criteria (partial credit + evidence)
+  // over the strict rule-based comparison endpoint when available.
+  const gradedCriteria =
+    evaluation?.criteria && evaluation.criteria.length > 0 ? evaluation.criteria : null;
+  const displayCriteria = gradedCriteria ?? comparison?.criteria ?? [];
+  const displayTotal = gradedCriteria
+    ? (() => {
+        const totalWeight = gradedCriteria.reduce((a, c) => a + c.weight, 0);
+        const totalScore = gradedCriteria.reduce((a, c) => a + c.score, 0);
+        return totalWeight > 0 ? Math.round((totalScore / totalWeight) * 10000) / 100 : 0;
+      })()
+    : (comparison?.total_score ?? 0);
+
   return (
     <AppShell
       title="AI Resume Review"
@@ -227,7 +240,7 @@ export function AIReviewClient() {
                     </div>
                     <ul className="text-xs list-disc pl-4 space-y-0.5">
                       {evaluation.strengths.length > 0 ? (
-                        evaluation.strengths.map((s) => <li key={s}>{s}</li>)
+                        evaluation.strengths.map((s, i) => <li key={`${s}-${i}`}>{s}</li>)
                       ) : (
                         <li className="text-muted-foreground list-none">—</li>
                       )}
@@ -240,7 +253,7 @@ export function AIReviewClient() {
                     </div>
                     <ul className="text-xs list-disc pl-4 space-y-0.5">
                       {evaluation.gaps.length > 0 ? (
-                        evaluation.gaps.map((g) => <li key={g}>{g}</li>)
+                        evaluation.gaps.map((g, i) => <li key={`${g}-${i}`}>{g}</li>)
                       ) : (
                         <li className="text-muted-foreground list-none">—</li>
                       )}
@@ -253,7 +266,7 @@ export function AIReviewClient() {
                     </div>
                     <ul className="text-xs list-disc pl-4 space-y-0.5">
                       {evaluation.risk_flags.length > 0 ? (
-                        evaluation.risk_flags.map((r) => <li key={r}>{r}</li>)
+                        evaluation.risk_flags.map((r, i) => <li key={`${r}-${i}`}>{r}</li>)
                       ) : (
                         <li className="text-muted-foreground list-none">—</li>
                       )}
@@ -264,8 +277,8 @@ export function AIReviewClient() {
                   <div className="p-3 rounded-md bg-muted/50">
                     <div className="text-xs font-semibold mb-1">Suggested interview questions</div>
                     <ul className="text-xs list-disc pl-4 space-y-0.5">
-                      {evaluation.suggested_interview_questions.map((q) => (
-                        <li key={q}>{q}</li>
+                      {evaluation.suggested_interview_questions.map((q, i) => (
+                        <li key={`${q}-${i}`}>{q}</li>
                       ))}
                     </ul>
                   </div>
@@ -343,8 +356,8 @@ export function AIReviewClient() {
                         <div>
                           <span className="text-muted-foreground text-xs">Must-have skills</span>
                           <div className="flex flex-wrap gap-1 mt-1">
-                            {comparison.job_requirements.required_skills.map((s) => (
-                              <Badge key={s} variant="secondary">
+                            {comparison.job_requirements.required_skills.map((s, i) => (
+                              <Badge key={`${s}-${i}`} variant="secondary">
                                 {s}
                               </Badge>
                             ))}
@@ -374,8 +387,8 @@ export function AIReviewClient() {
                         <div>
                           <span className="text-muted-foreground text-xs">Skills</span>
                           <div className="flex flex-wrap gap-1 mt-1">
-                            {comparison.candidate_profile.skills.map((s) => (
-                              <Badge key={s} variant="outline">
+                            {comparison.candidate_profile.skills.map((s, i) => (
+                              <Badge key={`${s}-${i}`} variant="outline">
                                 {s}
                               </Badge>
                             ))}
@@ -397,7 +410,15 @@ export function AIReviewClient() {
 
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-base">Weighted comparison</CardTitle>
+                      <CardTitle className="text-base">
+                        {gradedCriteria ? "AI-graded comparison" : "Weighted comparison"}
+                      </CardTitle>
+                      {gradedCriteria && (
+                        <p className="text-xs text-muted-foreground">
+                          Each requirement is scored with partial credit for related experience, with the
+                          evidence the AI found.
+                        </p>
+                      )}
                     </CardHeader>
                     <CardContent className="p-0">
                       <table className="w-full text-sm">
@@ -406,13 +427,13 @@ export function AIReviewClient() {
                             <th className="p-3 text-left">Type</th>
                             <th className="p-3 text-left">Requirement</th>
                             <th className="p-3 text-right">Weight</th>
-                            <th className="p-3 text-left">Candidate</th>
+                            <th className="p-3 text-left">{gradedCriteria ? "Evidence" : "Candidate"}</th>
                             <th className="p-3 text-left">Status</th>
                             <th className="p-3 text-right">Score</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y">
-                          {comparison.criteria.map((c, i) => (
+                          {displayCriteria.map((c, i) => (
                             <tr key={i} className="hover:bg-muted/30">
                               <td className="p-3 text-xs">
                                 <Badge variant="outline" className="text-[10px]">
@@ -436,7 +457,7 @@ export function AIReviewClient() {
                             <td className="p-3" colSpan={5}>
                               Total match score
                             </td>
-                            <td className="p-3 text-right">{comparison.total_score}</td>
+                            <td className="p-3 text-right">{displayTotal}</td>
                           </tr>
                         </tbody>
                       </table>
