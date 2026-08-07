@@ -1,13 +1,26 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session, require_permission
 from app.core.enums import AuditAction, PermissionAction, PermissionResource
 from app.schemas.application import ApplicationRead
 from app.schemas.auth import CurrentUser
-from app.schemas.job import JobCreate, JobRead, JobUpdate
+from app.schemas.job import (
+    JobCreate,
+    JobCustomFieldCreate,
+    JobCustomFieldRead,
+    JobDocumentRead,
+    JobNoteCreate,
+    JobNoteRead,
+    JobRead,
+    JobSearchCriteriaRead,
+    JobSearchCriteriaWrite,
+    JobSubmissionsSummary,
+    JobUpdate,
+)
 from app.services.applications.service import list_applications
 from app.services.audit.service import record as record_audit
 from app.services.jobs import service as job_service
@@ -15,39 +28,55 @@ from app.services.jobs import service as job_service
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
+_SKIP_COLUMNS = {"created_by", "updated_by", "deleted_at"}
+
+
 def _to_read(db: Session, job) -> JobRead:
     stats = job_service.job_stats(db, job.id)
+    assigned_names = job_service_user_names(db, job.assigned_to_ids)
     return JobRead(
-        id=job.id,
-        organization_id=job.organization_id,
-        req_id=job.req_id,
-        slug=job.slug,
-        title=job.title,
-        department=job.department,
-        client_id=job.client_id,
-        hiring_manager_id=job.hiring_manager_id,
-        recruiter_id=job.recruiter_id,
-        stage_template_id=job.stage_template_id,
-        location=job.location,
-        workplace=job.workplace,
-        employment_type=job.employment_type,
-        openings=job.openings,
-        pay_min=job.pay_min,
-        pay_max=job.pay_max,
-        priority=job.priority,
-        status=job.status,
-        summary=job.summary,
-        description=job.description,
-        responsibilities=job.responsibilities,
-        required_skills=job.required_skills,
-        nice_to_have=job.nice_to_have,
-        screening_questions=job.screening_questions,
-        experience=job.experience,
-        education=job.education,
-        posted_at=job.posted_at,
-        created_at=job.created_at,
-        updated_at=job.updated_at,
+        **{
+            column.name: getattr(job, column.name)
+            for column in job.__table__.columns
+            if column.name not in _SKIP_COLUMNS
+        },
+        created_by=job.created_by,
+        updated_by=job.updated_by,
+        client_name=job.client.name if job.client else None,
+        sales_manager_name=job.sales_manager.full_name if job.sales_manager else None,
+        recruitment_manager_name=(
+            job.recruitment_manager.full_name if job.recruitment_manager else None
+        ),
+        account_manager_name=job.account_manager.full_name if job.account_manager else None,
+        primary_recruiter_name=job.primary_recruiter.full_name if job.primary_recruiter else None,
+        assigned_to_names=[assigned_names[uid] for uid in job.assigned_to_ids if uid in assigned_names],
+        created_by_name=job.created_by_user.full_name if job.created_by_user else None,
+        updated_by_name=job.updated_by_user.full_name if job.updated_by_user else None,
+        job_age_days=job_service.job_age_days(job),
+        custom_fields=job.custom_fields,
+        search_criteria=job.search_criteria,
         **stats,
+    )
+
+
+def job_service_user_names(db: Session, user_ids) -> dict:
+    from app.db.models.user import User
+
+    if not user_ids:
+        return {}
+    rows = db.execute(select(User.id, User.full_name).where(User.id.in_(set(user_ids)))).all()
+    return {row[0]: row[1] for row in rows}
+
+
+def _note_read(note) -> JobNoteRead:
+    return JobNoteRead(
+        id=note.id,
+        body=note.body,
+        note_type=note.note_type,
+        action=note.action,
+        author_id=note.author_id,
+        author_name=note.author.full_name if note.author else None,
+        created_at=note.created_at,
     )
 
 
@@ -78,8 +107,15 @@ def create_job(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.JOB, PermissionAction.CREATE)),
     db: Session = Depends(get_db_session),
 ) -> JobRead:
+    data = payload.model_dump()
     job = job_service.create_job(
-        db, organization_id=current_user.organization_id, actor_id=current_user.id, **payload.model_dump()
+        db,
+        organization_id=current_user.organization_id,
+        actor_id=current_user.id,
+        notes=data.pop("notes", []),
+        custom_fields=data.pop("custom_fields", []),
+        search_criteria=data.pop("search_criteria", None),
+        **data,
     )
     record_audit(
         db,
@@ -171,3 +207,94 @@ def job_applications(
 ) -> list[ApplicationRead]:
     job_service.get_job(db, current_user.organization_id, job_id, viewer=current_user)
     return list_applications(db, current_user.organization_id, job_id=job_id, viewer=current_user)
+
+
+# --- Job snapshot sections -------------------------------------------------
+
+_JOB_READ = require_permission(PermissionResource.JOB, PermissionAction.READ)
+_JOB_UPDATE = require_permission(PermissionResource.JOB, PermissionAction.UPDATE)
+
+
+@router.get("/{job_id}/submissions", response_model=JobSubmissionsSummary)
+def job_submissions(
+    job_id: uuid.UUID,
+    current_user: CurrentUser = Depends(_JOB_READ),
+    db: Session = Depends(get_db_session),
+) -> JobSubmissionsSummary:
+    job = job_service.get_job(db, current_user.organization_id, job_id, viewer=current_user)
+    return JobSubmissionsSummary(**job_service.list_submissions(db, job))
+
+
+@router.get("/{job_id}/notes", response_model=list[JobNoteRead])
+def list_job_notes(
+    job_id: uuid.UUID,
+    current_user: CurrentUser = Depends(_JOB_READ),
+    db: Session = Depends(get_db_session),
+) -> list[JobNoteRead]:
+    job = job_service.get_job(db, current_user.organization_id, job_id, viewer=current_user)
+    return [_note_read(n) for n in job_service.list_notes(db, job)]
+
+
+@router.post("/{job_id}/notes", response_model=JobNoteRead, status_code=201)
+def add_job_note(
+    job_id: uuid.UUID,
+    payload: JobNoteCreate,
+    current_user: CurrentUser = Depends(_JOB_UPDATE),
+    db: Session = Depends(get_db_session),
+) -> JobNoteRead:
+    job = job_service.get_job(db, current_user.organization_id, job_id, viewer=current_user)
+    note = job_service.add_note(db, job, author_id=current_user.id, **payload.model_dump())
+    return _note_read(note)
+
+
+@router.get("/{job_id}/documents", response_model=list[JobDocumentRead])
+def list_job_documents(
+    job_id: uuid.UUID,
+    current_user: CurrentUser = Depends(_JOB_READ),
+    db: Session = Depends(get_db_session),
+) -> list[JobDocumentRead]:
+    job = job_service.get_job(db, current_user.organization_id, job_id, viewer=current_user)
+    return job_service.list_documents(db, job)
+
+
+@router.post("/{job_id}/documents", response_model=JobDocumentRead, status_code=201)
+async def upload_job_document(
+    job_id: uuid.UUID,
+    file: UploadFile = File(...),
+    current_user: CurrentUser = Depends(_JOB_UPDATE),
+    db: Session = Depends(get_db_session),
+) -> JobDocumentRead:
+    job = job_service.get_job(db, current_user.organization_id, job_id, viewer=current_user)
+    data = await file.read()
+    return job_service.add_document(
+        db,
+        job,
+        file_name=file.filename or "document",
+        content_type=file.content_type or "application/octet-stream",
+        data=data,
+        uploaded_by=current_user.id,
+    )
+
+
+@router.put("/{job_id}/search-criteria", response_model=JobSearchCriteriaRead)
+def save_job_search_criteria(
+    job_id: uuid.UUID,
+    payload: JobSearchCriteriaWrite,
+    current_user: CurrentUser = Depends(_JOB_UPDATE),
+    db: Session = Depends(get_db_session),
+) -> JobSearchCriteriaRead:
+    job = job_service.get_job(db, current_user.organization_id, job_id, viewer=current_user)
+    return job_service.upsert_search_criteria(db, job, **payload.model_dump())
+
+
+@router.put("/{job_id}/custom-fields", response_model=JobCustomFieldRead)
+def set_job_custom_field(
+    job_id: uuid.UUID,
+    payload: JobCustomFieldCreate,
+    current_user: CurrentUser = Depends(_JOB_UPDATE),
+    db: Session = Depends(get_db_session),
+) -> JobCustomFieldRead:
+    job = job_service.get_job(db, current_user.organization_id, job_id, viewer=current_user)
+    return job_service.set_custom_field(
+        db, job, field_name=payload.field_name, field_value=payload.field_value
+    )

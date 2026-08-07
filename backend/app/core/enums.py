@@ -149,6 +149,25 @@ class ClientStatus(str, enum.Enum):
     PAUSED = "Paused"
 
 
+class ClientCategory(str, enum.Enum):
+    DIRECT = "Direct"
+    IMPLEMENTATION_PARTNER = "Implementation Partner"
+    STAFFING_PARTNER = "Staffing Partner"
+    SYSTEM_INTEGRATOR = "System Integrator"
+    INTERNAL = "Internal"
+
+
+class ClientVisibility(str, enum.Enum):
+    ORGANIZATION_LEVEL = "Organization Level"
+    BUSINESS_UNIT = "Business Unit"
+
+
+class ClientNoteType(str, enum.Enum):
+    CLIENT = "Client"
+    LEAD = "Lead"
+    APPLICANT_REFERENCE = "Applicant Reference"
+
+
 class VendorStatus(str, enum.Enum):
     ACTIVE = "Active"
     ON_HOLD = "On Hold"

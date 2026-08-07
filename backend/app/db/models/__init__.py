@@ -10,11 +10,18 @@ from app.db.models.candidate import (
     CandidateTag,
     DuplicateCandidateLink,
 )
-from app.db.models.client import Client, ClientContact
+from app.db.models.client import (
+    Client,
+    ClientAccount,
+    ClientAssignment,
+    ClientContact,
+    ClientDocument,
+    ClientNote,
+)
 from app.db.models.communication import CommunicationTemplate, OutboundMessage
 from app.db.models.interview import Interview, InterviewFeedback, InterviewPanelMember
 from app.db.models.invitation import Invitation
-from app.db.models.job import Job
+from app.db.models.job import Job, JobCustomField, JobDocument, JobNote, JobSearchCriteria
 from app.db.models.offer import Offer, OfferApproval, OfferVersion
 from app.db.models.onboarding import OnboardingCase, OnboardingTask
 from app.db.models.organization import Organization, OrganizationSettings
@@ -23,7 +30,15 @@ from app.db.models.pipeline_stage import StageTemplate, StageTemplateStage
 from app.db.models.refresh_token import RefreshToken
 from app.db.models.role import Permission, Role, RolePermission, UserRole
 from app.db.models.user import User
-from app.db.models.vendor import Vendor, VendorContact
+from app.db.models.vendor import (
+    Vendor,
+    VendorAccount,
+    VendorBankAccount,
+    VendorContact,
+    VendorDocument,
+    VendorMeeting,
+    VendorNote,
+)
 
 __all__ = [
     "Base",
@@ -42,9 +57,22 @@ __all__ = [
     "StageTemplateStage",
     "Client",
     "ClientContact",
+    "ClientAccount",
+    "ClientNote",
+    "ClientDocument",
+    "ClientAssignment",
     "Vendor",
     "VendorContact",
+    "VendorAccount",
+    "VendorNote",
+    "VendorDocument",
+    "VendorMeeting",
+    "VendorBankAccount",
     "Job",
+    "JobNote",
+    "JobDocument",
+    "JobCustomField",
+    "JobSearchCriteria",
     "Candidate",
     "CandidateEducation",
     "CandidateTag",
