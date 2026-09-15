@@ -1,13 +1,12 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  reactStrictMode: true,
-  // Change "standalone" to "export" to generate the 'out' directory for Firebase Hosting
-  output: "export",
-  // Disable native Next.js image optimization as it is not supported in pure static exports
-  images: {
-    unoptimized: true,
-  },
-};
-
-export default nextConfig;
+{
+  "hosting": {
+    "public": "out",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
