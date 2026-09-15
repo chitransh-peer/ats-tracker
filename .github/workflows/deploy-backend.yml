@@ -51,7 +51,7 @@ jobs:
             --allow-unauthenticated
             --port=8000
             --add-cloudsql-instances=peer-website-504716:us-central1:ats-db-instance
-            --set-env-vars=CORS_ORIGINS=${{ env.FRONTEND_URL }},DATABASE_URL=postgresql+psycopg://ats:${{ secrets.DB_PASSWORD }}@/ats_tracker?host=/cloudsql/peer-website-504716:us-central1:ats-db-instance
+            --set-env-vars=APP_ENV=production,CORS_ORIGINS=${{ env.FRONTEND_URL }},JWT_SECRET=production-ats-tracker-jwt-secret-key-32chars,DATABASE_URL=postgresql+psycopg2://ats:${{ secrets.DB_PASSWORD }}@/ats_tracker?host=/cloudsql/peer-website-504716:us-central1:ats-db-instance
 
       - name: Show Output URL
         run: echo "Backend deployed to ${{ steps.deploy.outputs.url }}"

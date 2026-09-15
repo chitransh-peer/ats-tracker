@@ -14,14 +14,12 @@ env:
   GAR_LOCATION: "us-central1"
   REPOSITORY: "ats-artifacts"
   SERVICE_NAME: "ats-frontend"
-  # REEMPLAZA LA SIGUIENTE URL CON LA DE TU BACKEND EN CLOUD RUN (No olvides el /api/v1 al final)
-  BACKEND_API_URL: "https://TU_URL_REAL_DEL_BACKEND_AQUI.run.app/api/v1"
+  BACKEND_API_URL: "https://ats-backend-peer-website-504716.us-central1.run.app/api/v1"
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     
-    # Asegura que todos los comandos 'run' se ejecuten dentro de la carpeta Frontend
     defaults:
       run:
         working-directory: ./Frontend
@@ -40,7 +38,7 @@ jobs:
 
       - name: Authenticate Docker to Artifact Registry
         run: |
-          gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev
+          gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet
 
       - name: Build and Push Docker Image
         run: |
