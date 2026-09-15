@@ -20,6 +20,10 @@ COPY . .
 # Next.js telemetry is disabled
 ENV NEXT_TELEMETRY_DISABLED 1
 
+# Declare the build argument and set it as an environment variable
+ARG NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+
 # Build the application
 RUN npm run build
 
