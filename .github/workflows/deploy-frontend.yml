@@ -1,42 +1,42 @@
-name: Deploy ATS Frontend to Firebase Hosting
+es: actions/checkout@v4
 
-on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'Frontend/**'
+  - name: Setup Node.js
+    uses: actions/setup-node@v4
+    with:
+      node-version: '20'
+      cache: 'npm'
+      cache-dependency-path: 'Frontend/package-lock.json'
 
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
+  - name: Authenticate to Google Cloud
+    id: auth
+    uses: google-github-actions/auth@v2
+    with:
+      credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+  - name: Set up Cloud SDK
+    uses: google-github-actions/setup-gcloud@v2
+    with:
+      project_id: ${{ env.PROJECT_ID }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-          cache-dependency-path: 'Frontend/package-lock.json'
+  - name: Authorize Docker push
+    run: gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev
 
-      - name: Install Dependencies
-        run: |
-          cd Frontend
-          npm ci
+  - name: Build and Push Container
+    run: |
+      cd Frontend
+      docker build -t ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }} .
+      docker push ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
 
-      - name: Build Next.js Application
-        run: |
-          cd Frontend
-          npm run build
+  - name: Deploy to Cloud Run
+    id: deploy
+    uses: google-github-actions/deploy-cloudrun@v2
+    with:
+      service: ${{ env.SERVICE_NAME }}
+      region: ${{ env.REGION }}
+      image: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+      flags: |
+        --allow-unauthenticated
+        --port=3000
 
-      - name: Deploy to Firebase Hosting
-        uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: '${{ secrets.GITHUB_TOKEN }}'
-          firebaseServiceAccount: '${{ secrets.GCP_SA_KEY }}'
-          channelId: live
-          projectId: peer-website-504716
-          entryPoint: ./Frontend
+  - name: Show Output
+    run: echo ${{ steps.deploy.outputs.url }}
