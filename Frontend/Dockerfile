@@ -1,4 +1,4 @@
-# Base image for Node.js
+# Base image for Node.js updated
 FROM node:20-alpine AS base
 
 # Install dependencies only when needed
