@@ -1,6 +1,6 @@
 import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -13,9 +13,9 @@ from app.db.models.interview import Interview, InterviewPanelMember
 from app.db.models.job import Job, JobCustomField, JobDocument, JobNote, JobSearchCriteria
 from app.db.models.pipeline_stage import StageTemplateStage
 from app.db.models.user import User
-from app.services.storage import service as storage_service
 from app.schemas.auth import CurrentUser
 from app.services.pipeline.service import seed_default_stage_template
+from app.services.storage import service as storage_service
 from app.utils.text import slugify
 
 
@@ -40,9 +40,15 @@ def _scope_filter(query, viewer: CurrentUser | None):
         )
     return query.where(or_(*conditions))
 
+
 _VALID_TRANSITIONS: dict[str, set[str]] = {
     JobStatus.DRAFT.value: {JobStatus.ACTIVE.value, JobStatus.CANCELLED.value},
-    JobStatus.ACTIVE.value: {JobStatus.DRAFT.value, JobStatus.ON_HOLD.value, JobStatus.CLOSED.value, JobStatus.CANCELLED.value},
+    JobStatus.ACTIVE.value: {
+        JobStatus.DRAFT.value,
+        JobStatus.ON_HOLD.value,
+        JobStatus.CLOSED.value,
+        JobStatus.CANCELLED.value,
+    },
     JobStatus.ON_HOLD.value: {JobStatus.ACTIVE.value, JobStatus.CLOSED.value, JobStatus.CANCELLED.value},
     JobStatus.CLOSED.value: set(),
     JobStatus.CANCELLED.value: set(),
@@ -51,7 +57,7 @@ _VALID_TRANSITIONS: dict[str, set[str]] = {
 
 def _generate_req_id(db: Session, organization_id: uuid.UUID) -> str:
     count = db.scalar(select(func.count(Job.id)).where(Job.organization_id == organization_id)) or 0
-    return f"REQ-{datetime.now(timezone.utc).year}{count + 1:04d}"
+    return f"REQ-{datetime.now(UTC).year}{count + 1:04d}"
 
 
 def _generate_slug(title: str) -> str:
@@ -95,9 +101,7 @@ def create_job(
     return job
 
 
-def get_job(
-    db: Session, organization_id: uuid.UUID, job_id: uuid.UUID, *, viewer: CurrentUser | None = None
-) -> Job:
+def get_job(db: Session, organization_id: uuid.UUID, job_id: uuid.UUID, *, viewer: CurrentUser | None = None) -> Job:
     query = select(Job).where(Job.id == job_id, Job.organization_id == organization_id, Job.deleted_at.is_(None))
     job = db.scalar(_scope_filter(query, viewer))
     if job is None:
@@ -147,7 +151,7 @@ def _transition(db: Session, job: Job, *, to_status: str, actor_id: uuid.UUID | 
     job.status = to_status
     job.updated_by = actor_id
     if to_status == JobStatus.ACTIVE.value and job.posted_at is None:
-        job.posted_at = datetime.now(timezone.utc)
+        job.posted_at = datetime.now(UTC)
     db.commit()
     db.refresh(job)
     return job
@@ -175,16 +179,22 @@ def cancel_job(db: Session, job: Job, *, actor_id: uuid.UUID | None) -> Job:
 
 def job_stats(db: Session, job_id: uuid.UUID) -> dict[str, int]:
     applications_count = db.scalar(select(func.count(Application.id)).where(Application.job_id == job_id)) or 0
-    hires_count = db.scalar(
-        select(func.count(Application.id)).where(
-            Application.job_id == job_id, Application.status == ApplicationStatus.HIRED.value
+    hires_count = (
+        db.scalar(
+            select(func.count(Application.id)).where(
+                Application.job_id == job_id, Application.status == ApplicationStatus.HIRED.value
+            )
         )
-    ) or 0
-    shortlisted_count = db.scalar(
-        select(func.count(Application.id))
-        .join(StageTemplateStage, Application.current_stage_id == StageTemplateStage.id)
-        .where(Application.job_id == job_id, StageTemplateStage.name == "Shortlisted")
-    ) or 0
+        or 0
+    )
+    shortlisted_count = (
+        db.scalar(
+            select(func.count(Application.id))
+            .join(StageTemplateStage, Application.current_stage_id == StageTemplateStage.id)
+            .where(Application.job_id == job_id, StageTemplateStage.name == "Shortlisted")
+        )
+        or 0
+    )
     return {
         "applications_count": applications_count,
         "shortlisted_count": shortlisted_count,
@@ -211,11 +221,7 @@ def upsert_search_criteria(db: Session, job: Job, **fields) -> JobSearchCriteria
 
 
 def set_custom_field(db: Session, job: Job, *, field_name: str, field_value: str | None) -> JobCustomField:
-    field = db.scalar(
-        select(JobCustomField).where(
-            JobCustomField.job_id == job.id, JobCustomField.field_name == field_name
-        )
-    )
+    field = db.scalar(select(JobCustomField).where(JobCustomField.job_id == job.id, JobCustomField.field_name == field_name))
     if field is None:
         field = JobCustomField(job_id=job.id, field_name=field_name, field_value=field_value)
         db.add(field)
@@ -272,14 +278,12 @@ def add_document(
 
 def list_documents(db: Session, job: Job) -> list[JobDocument]:
     return list(
-        db.scalars(
-            select(JobDocument).where(JobDocument.job_id == job.id).order_by(JobDocument.created_at.desc())
-        ).all()
+        db.scalars(select(JobDocument).where(JobDocument.job_id == job.id).order_by(JobDocument.created_at.desc())).all()
     )
 
 
 def job_age_days(job: Job) -> int:
-    return max((datetime.now(timezone.utc) - job.created_at).days, 0)
+    return max((datetime.now(UTC) - job.created_at).days, 0)
 
 
 def list_submissions(db: Session, job: Job) -> dict:

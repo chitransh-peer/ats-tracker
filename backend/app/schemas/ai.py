@@ -84,3 +84,11 @@ class JDResumeComparisonRead(BaseModel):
     candidate_profile: dict
     criteria: list[JDCriterion]
     total_score: float = Field(ge=0, le=100)
+
+
+class AIConfigRead(BaseModel):
+    provider: str
+    model: str
+    embeddings_enabled: bool
+    embeddings_model: str | None
+    evaluation_skill_weight: float

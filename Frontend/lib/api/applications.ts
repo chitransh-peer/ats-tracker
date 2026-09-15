@@ -5,6 +5,8 @@ export interface ApplicationFilters {
   job_id?: string;
   candidate_id?: string;
   status?: string;
+  page_size?: number;
+  offset?: number;
 }
 
 function buildQuery(params: object): string {
@@ -18,6 +20,19 @@ function buildQuery(params: object): string {
 
 export function listApplications(filters: ApplicationFilters = {}) {
   return apiClient.get<Application[]>(`/applications${buildQuery(filters)}`);
+}
+
+/** Paginated variant for the Applications grid. Server-side pagination is
+ * opt-in on this endpoint (see the backend route) so it doesn't disturb the
+ * many pages that still fetch every application for client-side lookups. */
+export function listApplicationsPage(filters: ApplicationFilters = {}) {
+  return apiClient.getPage<Application>(
+    `/applications${buildQuery({
+      ...filters,
+      page_size: filters.page_size?.toString(),
+      offset: filters.offset?.toString(),
+    })}`,
+  );
 }
 
 export function createApplication(input: {
@@ -49,4 +64,27 @@ export function rejectApplication(applicationId: string, note?: string) {
 
 export function restoreApplication(applicationId: string, note?: string) {
   return apiClient.post<Application>(`/applications/${applicationId}/restore`, { note });
+}
+
+export function getApplication(applicationId: string) {
+  return apiClient.get<Application>(`/applications/${applicationId}`);
+}
+
+export interface BulkActionResult {
+  succeeded: string[];
+  failed: { application_id: string; reason: string }[];
+}
+
+export function bulkRejectApplications(applicationIds: string[], note?: string) {
+  return apiClient.post<BulkActionResult>("/applications/bulk-reject", {
+    application_ids: applicationIds,
+    note,
+  });
+}
+
+export function bulkHoldApplications(applicationIds: string[], note?: string) {
+  return apiClient.post<BulkActionResult>("/applications/bulk-hold", {
+    application_ids: applicationIds,
+    note,
+  });
 }

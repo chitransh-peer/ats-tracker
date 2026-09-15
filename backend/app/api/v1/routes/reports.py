@@ -8,8 +8,11 @@ from app.schemas.report import (
     AgingJob,
     ExecutiveDashboard,
     FunnelStage,
+    HiringTrendPoint,
+    OfferMetrics,
     RecruiterDashboard,
     RecruiterPerformance,
+    ScoreDistributionBucket,
     SourceEffectiveness,
     TimeToFillSummary,
 )
@@ -40,9 +43,7 @@ def funnel(current_user: CurrentUser = Depends(_read), db: Session = Depends(get
 
 
 @router.get("/time-to-fill", response_model=TimeToFillSummary)
-def time_to_fill(
-    current_user: CurrentUser = Depends(_read), db: Session = Depends(get_db_session)
-) -> TimeToFillSummary:
+def time_to_fill(current_user: CurrentUser = Depends(_read), db: Session = Depends(get_db_session)) -> TimeToFillSummary:
     return report_service.time_to_fill(db, current_user.organization_id)
 
 
@@ -58,6 +59,25 @@ def recruiter_performance(
     current_user: CurrentUser = Depends(_read), db: Session = Depends(get_db_session)
 ) -> list[RecruiterPerformance]:
     return report_service.recruiter_performance(db, current_user.organization_id)
+
+
+@router.get("/hiring-trend", response_model=list[HiringTrendPoint])
+def hiring_trend(
+    current_user: CurrentUser = Depends(_read), db: Session = Depends(get_db_session)
+) -> list[HiringTrendPoint]:
+    return report_service.hiring_trend(db, current_user.organization_id)
+
+
+@router.get("/score-distribution", response_model=list[ScoreDistributionBucket])
+def score_distribution(
+    current_user: CurrentUser = Depends(_read), db: Session = Depends(get_db_session)
+) -> list[ScoreDistributionBucket]:
+    return report_service.score_distribution(db, current_user.organization_id)
+
+
+@router.get("/offer-metrics", response_model=OfferMetrics)
+def offer_metrics(current_user: CurrentUser = Depends(_read), db: Session = Depends(get_db_session)) -> OfferMetrics:
+    return report_service.offer_metrics(db, current_user.organization_id)
 
 
 @router.get("/aging-jobs", response_model=list[AgingJob])

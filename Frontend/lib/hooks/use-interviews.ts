@@ -24,3 +24,28 @@ export function useSubmitInterviewFeedback(interviewId: string) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["interviews"] }),
   });
 }
+
+export function useInterview(interviewId: string | undefined) {
+  return useQuery({
+    queryKey: ["interviews", interviewId, "detail"],
+    queryFn: () => interviewsApi.getInterview(interviewId as string),
+    enabled: !!interviewId,
+  });
+}
+
+export function useConsolidatedFeedback(interviewId: string | undefined) {
+  return useQuery({
+    queryKey: ["interviews", interviewId, "consolidated-feedback"],
+    queryFn: () => interviewsApi.getConsolidatedFeedback(interviewId as string),
+    enabled: !!interviewId,
+  });
+}
+
+export function useUpdateInterview(interviewId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { status?: string; scheduled_at?: string }) =>
+      interviewsApi.updateInterview(interviewId, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["interviews"] }),
+  });
+}

@@ -3,8 +3,7 @@ import { AdminClient } from "./admin-client";
 
 export const metadata: Metadata = {
   title: "Admin Console",
-  description:
-    "Manage users, roles, permissions, and audit logs across the ATS.",
+  description: "Manage users, roles, permissions, and audit logs across the ATS.",
   robots: { index: false, follow: false },
   alternates: { canonical: "/admin" },
   openGraph: {

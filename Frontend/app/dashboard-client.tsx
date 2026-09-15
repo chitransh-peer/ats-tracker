@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { hiringTrend, scoreDistribution } from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth/auth-context";
 import {
   useFunnel,
@@ -16,6 +15,12 @@ import {
   useAgingJobs,
   useRecruiterDashboard,
   useAuditLogs,
+  useHiringTrend,
+  useScoreDistribution,
+  useOfferMetrics,
+  useTimeToFill,
+  useExecutiveDashboard,
+  useRecruiterPerformance,
 } from "@/lib/hooks/use-reports";
 import { useCandidates } from "@/lib/hooks/use-candidates";
 import { useInterviews } from "@/lib/hooks/use-interviews";
@@ -51,6 +56,12 @@ export function DashboardClient() {
   const { data: sourceEffectiveness } = useSourceEffectiveness();
   const { data: agingJobs } = useAgingJobs();
   const { data: recruiterStats } = useRecruiterDashboard();
+  const { data: hiringTrend } = useHiringTrend();
+  const { data: scoreDistribution } = useScoreDistribution();
+  const { data: offerMetrics } = useOfferMetrics();
+  const { data: timeToFill } = useTimeToFill();
+  const { data: executive } = useExecutiveDashboard();
+  const { data: recruiterPerformance } = useRecruiterPerformance();
   const { data: candidates } = useCandidates();
   const { data: interviews } = useInterviews({ status: "Scheduled" });
   const { data: applications } = useApplications();
@@ -315,25 +326,50 @@ export function DashboardClient() {
         </TabsContent>
 
         <TabsContent value="leadership" className="space-y-6">
-          <p className="text-xs text-muted-foreground">
-            Leadership metrics below are illustrative placeholders pending further reporting work.
-          </p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard label="Open positions" value={48} />
-            <StatCard label="Time to fill" value="32d" change="-4d" tone="success" />
-            <StatCard label="Offer acceptance" value="87%" change="+3%" tone="success" />
-            <StatCard label="Recruiter productivity" value="1.4/wk" />
+            <StatCard label="Open positions" value={executive?.total_open_jobs ?? 0} />
+            <StatCard
+              label="Avg. time to fill"
+              value={
+                timeToFill?.average_days != null ? `${Math.round(timeToFill.average_days)}d` : "—"
+              }
+              hint={
+                timeToFill?.filled_jobs_count
+                  ? `across ${timeToFill.filled_jobs_count} hire${timeToFill.filled_jobs_count === 1 ? "" : "s"}`
+                  : "no hires yet"
+              }
+            />
+            <StatCard
+              label="Offer acceptance"
+              value={
+                offerMetrics?.acceptance_rate != null ? `${offerMetrics.acceptance_rate}%` : "—"
+              }
+              tone={
+                offerMetrics?.acceptance_rate != null && offerMetrics.acceptance_rate >= 70
+                  ? "success"
+                  : "default"
+              }
+              hint={offerMetrics ? `${offerMetrics.pending} awaiting approval` : undefined}
+            />
+            <StatCard
+              label="Active recruiters"
+              value={(recruiterPerformance ?? []).length}
+              hint="owning at least one open job"
+            />
           </div>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Hiring trend</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Offers created vs. hires made, last 12 months.
+              </p>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={260}>
-                <LineChart data={hiringTrend}>
+                <LineChart data={hiringTrend ?? []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="month" className="text-xs" />
-                  <YAxis className="text-xs" />
+                  <YAxis allowDecimals={false} className="text-xs" />
                   <Tooltip />
                   <Legend />
                   <Line type="monotone" dataKey="offers" stroke="#4f46e5" strokeWidth={2} />
@@ -342,35 +378,108 @@ export function DashboardClient() {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-base">Recruiter productivity</CardTitle>
+              <Button variant="ghost" size="sm" className="text-xs" asChild>
+                <Link href="/reports">
+                  Full report <ArrowRight className="ml-1 h-3 w-3" />
+                </Link>
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              {(recruiterPerformance ?? []).length === 0 ? (
+                <p className="p-6 text-center text-sm text-muted-foreground">
+                  No recruiters own an active job yet.
+                </p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="p-3 text-left">Recruiter</th>
+                      <th className="p-3 text-right">Open jobs</th>
+                      <th className="p-3 text-right">Applications</th>
+                      <th className="p-3 text-right">Hires</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {(recruiterPerformance ?? []).map((r) => (
+                      <tr key={r.recruiter_id} className="hover:bg-muted/30">
+                        <td className="p-3">{r.recruiter_name}</td>
+                        <td className="p-3 text-right">{r.open_jobs}</td>
+                        <td className="p-3 text-right">{r.applications}</td>
+                        <td className="p-3 text-right">{r.hires}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="executive" className="space-y-6">
-          <p className="text-xs text-muted-foreground">
-            AI match score distribution below is an illustrative placeholder — real scoring lands in
-            a later phase.
-          </p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard label="Hires YTD" value={188} tone="success" change="+22%" />
-            <StatCard label="Hiring velocity" value="6.4/wk" />
-            <StatCard label="Cost per hire" value="$3,240" change="-8%" tone="success" />
-            <StatCard label="Diversity hires" value="41%" hint="placeholder metric" />
+            <StatCard label="Total hires" value={executive?.total_hires ?? 0} tone="success" />
+            <StatCard label="Open requisitions" value={executive?.total_open_jobs ?? 0} />
+            <StatCard label="Candidates in database" value={executive?.total_candidates ?? 0} />
+            <StatCard
+              label="Offers out"
+              value={offerMetrics?.sent ?? 0}
+              hint={offerMetrics ? `${offerMetrics.declined} declined` : undefined}
+              tone="warning"
+            />
           </div>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">AI match score distribution</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={scoreDistribution}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="bucket" className="text-xs" />
-                  <YAxis className="text-xs" />
-                  <Tooltip />
-                  <Bar dataKey="count" radius={[4, 4, 0, 0]} fill="#4f46e5" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Org-wide funnel</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={executive?.funnel ?? []} layout="vertical" margin={{ left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" allowDecimals={false} className="text-xs" />
+                    <YAxis
+                      type="category"
+                      dataKey="stage"
+                      width={90}
+                      tickLine={false}
+                      axisLine={false}
+                      className="text-xs"
+                    />
+                    <Tooltip />
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]} fill="#10b981" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">AI match score distribution</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Latest completed evaluation per application.
+                </p>
+              </CardHeader>
+              <CardContent>
+                {(scoreDistribution ?? []).every((b) => b.count === 0) ? (
+                  <p className="grid h-[240px] place-items-center text-sm text-muted-foreground">
+                    No AI evaluations have completed yet.
+                  </p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart data={scoreDistribution ?? []}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="bucket" className="text-xs" />
+                      <YAxis allowDecimals={false} className="text-xs" />
+                      <Tooltip />
+                      <Bar dataKey="count" radius={[4, 4, 0, 0]} fill="#4f46e5" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </AppShell>

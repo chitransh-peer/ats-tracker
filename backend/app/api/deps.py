@@ -28,7 +28,8 @@ def get_current_user(
     try:
         decoded = decode_token(token)
     except jwt.PyJWTError:
-        raise UnauthorizedError("Invalid or expired token")
+        # from None: the JWT internals are noise to the caller and shouldn't reach logs.
+        raise UnauthorizedError("Invalid or expired token") from None
 
     if decoded.get("type") != "access":
         raise UnauthorizedError("Invalid token type")

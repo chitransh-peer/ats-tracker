@@ -20,8 +20,7 @@ def _serialize_role(role) -> RoleRead:
         display_name=role.display_name,
         is_system_role=role.is_system_role,
         permissions=[
-            PermissionRead(resource=rp.permission.resource, action=rp.permission.action)
-            for rp in role.role_permissions
+            PermissionRead(resource=rp.permission.resource, action=rp.permission.action) for rp in role.role_permissions
         ],
     )
 

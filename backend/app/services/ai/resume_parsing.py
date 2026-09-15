@@ -1,6 +1,6 @@
 import io
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import docx
 from pypdf import PdfReader
@@ -67,7 +67,7 @@ def parse_resume(db: Session, run: ResumeParseRun) -> ResumeParseRun:
     if document is None:
         run.status = ResumeParseStatus.FAILED.value
         run.error_message = "Candidate document was deleted before parsing could run"
-        run.completed_at = datetime.now(timezone.utc)
+        run.completed_at = datetime.now(UTC)
         db.commit()
         db.refresh(run)
         return run
@@ -124,7 +124,7 @@ def parse_resume(db: Session, run: ResumeParseRun) -> ResumeParseRun:
         run.status = ResumeParseStatus.FAILED.value
         run.error_message = str(exc)
 
-    run.completed_at = datetime.now(timezone.utc)
+    run.completed_at = datetime.now(UTC)
     db.commit()
     db.refresh(run)
     return run

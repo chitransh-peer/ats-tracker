@@ -2,13 +2,17 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import { AppShell, StatCard } from "@/components/layout/AppShell";
-import { useCandidates, useCreateCandidate } from "@/lib/hooks/use-candidates";
+import { useCandidatesPage, useCreateCandidate } from "@/lib/hooks/use-candidates";
+import { useBulkAddToBench } from "@/lib/hooks/use-bench";
+import { Pager } from "@/components/ui/pager";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Select,
@@ -25,7 +29,7 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Search } from "lucide-react";
+import { Search, UserPlus } from "lucide-react";
 import { initialsOf } from "@/lib/utils";
 import { ApiError } from "@/lib/api/client";
 
@@ -62,6 +66,7 @@ function AddCandidateDialog() {
       setCurrentTitle("");
       setCurrentCompany("");
       setSkills("");
+      toast.success(`Added ${fullName}.`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to add candidate.");
     }
@@ -115,15 +120,79 @@ function AddCandidateDialog() {
   );
 }
 
+const PAGE_SIZE = 50;
+
 export function CandidatesClient() {
   const [status, setStatus] = useState("all");
   const [search, setSearch] = useState("");
-  const { data: candidates, isLoading } = useCandidates({
+  const [offset, setOffset] = useState(0);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // Reset to the first page whenever the filters change, or "page 2 of the
+  // old filter" would silently apply to the new one.
+  function updateStatus(value: string) {
+    setStatus(value);
+    setOffset(0);
+  }
+  function updateSearch(value: string) {
+    setSearch(value);
+    setOffset(0);
+  }
+
+  const { data, isLoading } = useCandidatesPage({
     status: status !== "all" ? status : undefined,
     search: search || undefined,
+    limit: PAGE_SIZE,
+    offset,
   });
+  const candidates = data?.data;
+  const total = data?.total ?? 0;
+  const bulkAddToBench = useBulkAddToBench();
 
   const silverMedalists = candidates?.filter((c) => c.tags.includes("Silver Medalist")).length ?? 0;
+
+  const allOnPageSelected =
+    (candidates?.length ?? 0) > 0 && candidates!.every((c) => selected.has(c.id));
+
+  function toggleRow(id: string, checked: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function toggleAllOnPage(checked: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const c of candidates ?? []) {
+        if (checked) next.add(c.id);
+        else next.delete(c.id);
+      }
+      return next;
+    });
+  }
+
+  async function handleBulkAddToBench() {
+    const ids = [...selected];
+    try {
+      const result = await bulkAddToBench.mutateAsync(ids);
+      if (result.succeeded.length > 0) {
+        toast.success(
+          `Added ${result.succeeded.length} candidate${result.succeeded.length === 1 ? "" : "s"} to the talent bench.`,
+        );
+      }
+      if (result.failed.length > 0) {
+        toast.error(`${result.failed.length} couldn't be added.`, {
+          description: result.failed.map((f) => f.reason).join("; "),
+        });
+      }
+      setSelected(new Set());
+    } catch {
+      toast.error("Couldn't add the selected candidates to the bench. Try again.");
+    }
+  }
 
   return (
     <AppShell
@@ -132,7 +201,7 @@ export function CandidatesClient() {
       actions={<AddCandidateDialog />}
     >
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
-        <StatCard label="Total candidates" value={candidates?.length ?? 0} />
+        <StatCard label="Total candidates" value={total} />
         <StatCard
           label="Active pipeline"
           value={candidates?.filter((c) => c.status === "Active").length ?? 0}
@@ -150,10 +219,10 @@ export function CandidatesClient() {
                 placeholder="Search by name or email…"
                 className="pl-9 h-9"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => updateSearch(e.target.value)}
               />
             </div>
-            <Select value={status} onValueChange={setStatus}>
+            <Select value={status} onValueChange={updateStatus}>
               <SelectTrigger className="h-9 w-[160px]">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
@@ -165,12 +234,43 @@ export function CandidatesClient() {
                 <SelectItem value="Do Not Contact">Do Not Contact</SelectItem>
               </SelectContent>
             </Select>
+            {selected.size > 0 && (
+              <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-1.5">
+                <span className="text-xs font-medium">{selected.size} selected</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1 text-xs"
+                  onClick={handleBulkAddToBench}
+                  disabled={bulkAddToBench.isPending}
+                >
+                  <UserPlus className="h-3.5 w-3.5" />
+                  {bulkAddToBench.isPending ? "Adding…" : "Add to bench"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs"
+                  onClick={() => setSelected(new Set())}
+                >
+                  Clear
+                </Button>
+              </div>
+            )}
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
+                  <th className="p-3 w-10">
+                    <Checkbox
+                      checked={allOnPageSelected}
+                      onCheckedChange={(checked) => toggleAllOnPage(checked === true)}
+                      disabled={(candidates?.length ?? 0) === 0}
+                      aria-label="Select all candidates on this page"
+                    />
+                  </th>
                   <th className="p-3 text-left font-medium">Candidate</th>
                   <th className="p-3 text-left font-medium">Current</th>
                   <th className="p-3 text-left font-medium">Location</th>
@@ -182,20 +282,27 @@ export function CandidatesClient() {
               <tbody className="divide-y">
                 {isLoading && (
                   <tr>
-                    <td colSpan={6} className="p-6 text-center text-sm text-muted-foreground">
+                    <td colSpan={7} className="p-6 text-center text-sm text-muted-foreground">
                       Loading candidates…
                     </td>
                   </tr>
                 )}
                 {!isLoading && (candidates?.length ?? 0) === 0 && (
                   <tr>
-                    <td colSpan={6} className="p-6 text-center text-sm text-muted-foreground">
+                    <td colSpan={7} className="p-6 text-center text-sm text-muted-foreground">
                       No candidates yet.
                     </td>
                   </tr>
                 )}
                 {candidates?.map((c) => (
                   <tr key={c.id} className="hover:bg-muted/30">
+                    <td className="p-3">
+                      <Checkbox
+                        checked={selected.has(c.id)}
+                        onCheckedChange={(checked) => toggleRow(c.id, checked === true)}
+                        aria-label={`Select ${c.full_name}`}
+                      />
+                    </td>
                     <td className="p-3">
                       <div className="flex items-center gap-2">
                         <Avatar className="h-8 w-8">
@@ -247,6 +354,7 @@ export function CandidatesClient() {
               </tbody>
             </table>
           </div>
+          <Pager offset={offset} limit={PAGE_SIZE} total={total} onOffsetChange={setOffset} />
         </CardContent>
       </Card>
     </AppShell>

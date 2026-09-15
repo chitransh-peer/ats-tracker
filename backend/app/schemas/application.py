@@ -37,3 +37,18 @@ class ApplicationStageHistoryRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class BulkApplicationActionRequest(BaseModel):
+    application_ids: list[uuid.UUID]
+    note: str | None = None
+
+
+class BulkActionFailure(BaseModel):
+    application_id: uuid.UUID
+    reason: str
+
+
+class BulkActionResult(BaseModel):
+    succeeded: list[uuid.UUID]
+    failed: list[BulkActionFailure]

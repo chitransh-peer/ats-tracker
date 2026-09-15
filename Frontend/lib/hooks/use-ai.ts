@@ -61,3 +61,7 @@ export function useOverrideEvaluation() {
     },
   });
 }
+
+export function useAiConfig() {
+  return useQuery({ queryKey: ["ai", "config"], queryFn: aiApi.getAiConfig });
+}

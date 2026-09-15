@@ -145,8 +145,14 @@ def rule_based_score(job: Job, candidate: Candidate, parsed_resume: ParsedResume
         weight = required_budget / len(required)
         is_match = _skill_present(skill, candidate_skill_set, raw_text)
         criteria.append(
-            Criterion("Required Skill", skill, round(weight, 2), skill if is_match else "—",
-                      "Matched" if is_match else "Missing", weight if is_match else 0.0)
+            Criterion(
+                "Required Skill",
+                skill,
+                round(weight, 2),
+                skill if is_match else "—",
+                "Matched" if is_match else "Missing",
+                weight if is_match else 0.0,
+            )
         )
         (matched_skills if is_match else missing_skills).append(skill)
 
@@ -154,8 +160,14 @@ def rule_based_score(job: Job, candidate: Candidate, parsed_resume: ParsedResume
         weight = nice_budget / len(nice_to_have)
         is_match = _skill_present(skill, candidate_skill_set, raw_text)
         criteria.append(
-            Criterion("Nice to Have", skill, round(weight, 2), skill if is_match else "—",
-                      "Matched" if is_match else "Missing", weight if is_match else 0.0)
+            Criterion(
+                "Nice to Have",
+                skill,
+                round(weight, 2),
+                skill if is_match else "—",
+                "Matched" if is_match else "Missing",
+                weight if is_match else 0.0,
+            )
         )
         (matched_skills if is_match else missing_skills).append(skill)
 
@@ -164,16 +176,22 @@ def rule_based_score(job: Job, candidate: Candidate, parsed_resume: ParsedResume
     if required_years is not None and candidate_years is not None:
         meets_bar = candidate_years >= required_years
         criteria.append(
-            Criterion("Experience", job.experience, _EXPERIENCE_BUDGET, f"{candidate_years} years",
-                      "Matched" if meets_bar else "Partial",
-                      _EXPERIENCE_BUDGET if meets_bar else _EXPERIENCE_BUDGET * (candidate_years / required_years))
+            Criterion(
+                "Experience",
+                job.experience,
+                _EXPERIENCE_BUDGET,
+                f"{candidate_years} years",
+                "Matched" if meets_bar else "Partial",
+                _EXPERIENCE_BUDGET if meets_bar else _EXPERIENCE_BUDGET * (candidate_years / required_years),
+            )
         )
 
     total_possible = sum(c.weight for c in criteria)
     total_score = round(sum(c.score for c in criteria) / total_possible * 100, 2) if total_possible > 0 else 0.0
 
-    return RuleScoreResult(total_score=total_score, criteria=criteria, matched_skills=matched_skills,
-                            missing_skills=missing_skills)
+    return RuleScoreResult(
+        total_score=total_score, criteria=criteria, matched_skills=matched_skills, missing_skills=missing_skills
+    )
 
 
 def _job_text(job: Job) -> str:
@@ -207,18 +225,12 @@ def _status_from_pct(pct: float) -> str:
     return "Matched" if pct >= 70 else "Partial" if pct >= 30 else "Missing"
 
 
-def _build_display_criteria(
-    rule_result: "RuleScoreResult", llm_criteria: list, general_competencies: list
-) -> list[dict]:
+def _build_display_criteria(rule_result: "RuleScoreResult", llm_criteria: list, general_competencies: list) -> list[dict]:
     """Build the graded comparison rows: the JD's per-requirement grades (partial
     credit + evidence) plus broad general-competency rows that credit role fit
     beyond the listed skills, mirroring how an expert recruiter (or ChatGPT) reads
     a résumé. Falls back to the deterministic rule values when the LLM didn't grade."""
-    graded = {
-        str(c.get("requirement", "")).strip().lower(): c
-        for c in (llm_criteria or [])
-        if isinstance(c, dict)
-    }
+    graded = {str(c.get("requirement", "")).strip().lower(): c for c in (llm_criteria or []) if isinstance(c, dict)}
     rows: list[dict] = []
     for c in rule_result.criteria:
         row = {
@@ -230,7 +242,7 @@ def _build_display_criteria(
             "score": round(c.score, 2),
         }
         g = graded.get(c.requirement.strip().lower())
-        if g is not None and isinstance(g.get("score"), (int, float)):
+        if g is not None and isinstance(g.get("score"), int | float):
             pct = max(0.0, min(100.0, float(g["score"])))
             row["score"] = round(c.weight * pct / 100, 2)
             row["status"] = _status_from_pct(pct)
@@ -239,7 +251,7 @@ def _build_display_criteria(
         rows.append(row)
 
     for gc in general_competencies or []:
-        if not isinstance(gc, dict) or not isinstance(gc.get("score"), (int, float)):
+        if not isinstance(gc, dict) or not isinstance(gc.get("score"), int | float):
             continue
         pct = max(0.0, min(100.0, float(gc["score"])))
         rows.append(
@@ -385,7 +397,7 @@ def evaluate_application(db: Session, evaluation: AIEvaluation) -> AIEvaluation:
         # (it now sees the full résumé), which is what closes the gap with tools
         # like ChatGPT on strong-but-differently-worded résumés.
         raw_match = fields.get("match_score")
-        llm_score = float(raw_match) if isinstance(raw_match, (int, float)) else None
+        llm_score = float(raw_match) if isinstance(raw_match, int | float) else None
         if embed_score is not None and llm_score is not None:
             evaluation.semantic_score = round((embed_score + llm_score) / 2, 2)
         elif embed_score is not None:
@@ -405,14 +417,15 @@ def evaluate_application(db: Session, evaluation: AIEvaluation) -> AIEvaluation:
 
         # Skill/fit component: prefer the LLM's per-requirement graded score
         # (partial credit) over the binary text-match rule score when available.
-        rows = _build_display_criteria(
-            rule_result, fields.get("criteria") or [], fields.get("general_competencies") or []
-        )
+        rows = _build_display_criteria(rule_result, fields.get("criteria") or [], fields.get("general_competencies") or [])
         evaluation.criteria = rows
         skill_component = _score_from_criteria(rows) if rows else rule_result.total_score
         w = get_settings().evaluation_skill_weight
-        evaluation.overall_score = round(w * skill_component + (1 - w) * float(evaluation.semantic_score), 2) \
-            if evaluation.semantic_score is not None else skill_component
+        evaluation.overall_score = (
+            round(w * skill_component + (1 - w) * float(evaluation.semantic_score), 2)
+            if evaluation.semantic_score is not None
+            else skill_component
+        )
     except AIProviderError as exc:
         # The LLM narrative is unavailable, but a local embedding score can still
         # give a semantic signal on top of the rule score.

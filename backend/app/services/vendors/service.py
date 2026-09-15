@@ -42,9 +42,7 @@ def list_vendors(db: Session, organization_id: uuid.UUID) -> list[Vendor]:
 
 def get_vendor(db: Session, organization_id: uuid.UUID, vendor_id: uuid.UUID) -> Vendor:
     vendor = db.scalar(
-        select(Vendor)
-        .where(Vendor.id == vendor_id, Vendor.organization_id == organization_id)
-        .options(*_LOAD_OPTIONS)
+        select(Vendor).where(Vendor.id == vendor_id, Vendor.organization_id == organization_id).options(*_LOAD_OPTIONS)
     )
     if vendor is None:
         raise NotFoundError("Vendor not found")
@@ -62,9 +60,7 @@ def create_vendor(
     bank_accounts: list[dict] | None = None,
     **fields,
 ) -> Vendor:
-    vendor = Vendor(
-        organization_id=organization_id, created_by=actor_id, updated_by=actor_id, **fields
-    )
+    vendor = Vendor(organization_id=organization_id, created_by=actor_id, updated_by=actor_id, **fields)
     db.add(vendor)
     db.flush()
 
@@ -182,9 +178,7 @@ def add_document(
 def list_documents(db: Session, vendor: Vendor) -> list[VendorDocument]:
     return list(
         db.scalars(
-            select(VendorDocument)
-            .where(VendorDocument.vendor_id == vendor.id)
-            .order_by(VendorDocument.created_at.desc())
+            select(VendorDocument).where(VendorDocument.vendor_id == vendor.id).order_by(VendorDocument.created_at.desc())
         ).all()
     )
 
@@ -200,8 +194,11 @@ def resolve_user_names(db: Session, user_ids: list[uuid.UUID]) -> dict[uuid.UUID
 def active_submissions_count(db: Session, organization_id: uuid.UUID, vendor_name: str) -> int:
     """Submissions are applications whose `source` tags this vendor by name (the
     lightweight vendor model agreed for Phase 2 — no dedicated submission table)."""
-    return db.scalar(
-        select(func.count(Application.id)).where(
-            Application.organization_id == organization_id, Application.source == f"vendor:{vendor_name}"
+    return (
+        db.scalar(
+            select(func.count(Application.id)).where(
+                Application.organization_id == organization_id, Application.source == f"vendor:{vendor_name}"
+            )
         )
-    ) or 0
+        or 0
+    )

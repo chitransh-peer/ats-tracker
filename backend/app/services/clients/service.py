@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -32,13 +32,11 @@ _LOAD_OPTIONS = (
 
 def _generate_client_code(db: Session, organization_id: uuid.UUID) -> str:
     count = db.scalar(select(func.count(Client.id)).where(Client.organization_id == organization_id)) or 0
-    year = datetime.now(timezone.utc).year
+    year = datetime.now(UTC).year
     while True:
         count += 1
         code = f"CLI-{year}{count:04d}"
-        exists = db.scalar(
-            select(Client.id).where(Client.organization_id == organization_id, Client.client_code == code)
-        )
+        exists = db.scalar(select(Client.id).where(Client.organization_id == organization_id, Client.client_code == code))
         if exists is None:
             return code
 
@@ -56,9 +54,7 @@ def list_clients(db: Session, organization_id: uuid.UUID) -> list[Client]:
 
 def get_client(db: Session, organization_id: uuid.UUID, client_id: uuid.UUID) -> Client:
     client = db.scalar(
-        select(Client)
-        .where(Client.id == client_id, Client.organization_id == organization_id)
-        .options(*_LOAD_OPTIONS)
+        select(Client).where(Client.id == client_id, Client.organization_id == organization_id).options(*_LOAD_OPTIONS)
     )
     if client is None:
         raise NotFoundError("Client not found")
@@ -181,14 +177,10 @@ def add_document(
 def list_documents(db: Session, client: Client) -> list[ClientDocument]:
     return list(
         db.scalars(
-            select(ClientDocument)
-            .where(ClientDocument.client_id == client.id)
-            .order_by(ClientDocument.created_at.desc())
+            select(ClientDocument).where(ClientDocument.client_id == client.id).order_by(ClientDocument.created_at.desc())
         ).all()
     )
 
 
 def active_jobs_count(db: Session, client_id: uuid.UUID) -> int:
-    return db.scalar(
-        select(func.count(Job.id)).where(Job.client_id == client_id, Job.status == JobStatus.ACTIVE.value)
-    ) or 0
+    return db.scalar(select(func.count(Job.id)).where(Job.client_id == client_id, Job.status == JobStatus.ACTIVE.value)) or 0

@@ -1,0 +1,23 @@
+# Secrets — must never enter an image layer
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output (reinstalled/rebuilt inside the image)
+node_modules/
+.next/
+out/
+build/
+
+# VCS and editor
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Tooling caches
+.eslintcache
+.claude/
+
+# Not needed to build
+*.md

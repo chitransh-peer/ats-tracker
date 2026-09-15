@@ -37,11 +37,7 @@ def seed_default_stage_template(db: Session, organization_id: uuid.UUID) -> Stag
 
     for order, name in enumerate(DEFAULT_STAGE_NAMES):
         terminal_outcome = TerminalOutcome.HIRED.value if name == "Hired" else TerminalOutcome.NONE.value
-        db.add(
-            StageTemplateStage(
-                template_id=template.id, name=name, sort_order=order, terminal_outcome=terminal_outcome
-            )
-        )
+        db.add(StageTemplateStage(template_id=template.id, name=name, sort_order=order, terminal_outcome=terminal_outcome))
     db.commit()
     db.refresh(template)
     return template
@@ -86,8 +82,11 @@ def move_stage(
 
     db.add(
         ApplicationStageHistory(
-            application_id=application.id, from_stage_id=from_stage_id, to_stage_id=to_stage.id,
-            changed_by=actor_id, note=note,
+            application_id=application.id,
+            from_stage_id=from_stage_id,
+            to_stage_id=to_stage.id,
+            changed_by=actor_id,
+            note=note,
         )
     )
     db.commit()
@@ -105,8 +104,11 @@ def reject_application(
     application.status = ApplicationStatus.REJECTED.value
     db.add(
         ApplicationStageHistory(
-            application_id=application.id, from_stage_id=from_stage_id, to_stage_id=from_stage_id,
-            changed_by=actor_id, note=note or "Rejected",
+            application_id=application.id,
+            from_stage_id=from_stage_id,
+            to_stage_id=from_stage_id,
+            changed_by=actor_id,
+            note=note or "Rejected",
         )
     )
     db.commit()
@@ -123,8 +125,11 @@ def hold_application(
     application.status = ApplicationStatus.ON_HOLD.value
     db.add(
         ApplicationStageHistory(
-            application_id=application.id, from_stage_id=application.current_stage_id,
-            to_stage_id=application.current_stage_id, changed_by=actor_id, note=note or "On hold",
+            application_id=application.id,
+            from_stage_id=application.current_stage_id,
+            to_stage_id=application.current_stage_id,
+            changed_by=actor_id,
+            note=note or "On hold",
         )
     )
     db.commit()
@@ -141,8 +146,11 @@ def restore_application(
     application.status = ApplicationStatus.ACTIVE.value
     db.add(
         ApplicationStageHistory(
-            application_id=application.id, from_stage_id=application.current_stage_id,
-            to_stage_id=application.current_stage_id, changed_by=actor_id, note=note or "Restored",
+            application_id=application.id,
+            from_stage_id=application.current_stage_id,
+            to_stage_id=application.current_stage_id,
+            changed_by=actor_id,
+            note=note or "Restored",
         )
     )
     db.commit()

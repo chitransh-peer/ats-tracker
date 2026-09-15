@@ -1,7 +1,6 @@
 import uuid
-from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -35,14 +34,10 @@ class Candidate(TimestampMixin, AuditedByMixin, SoftDeleteMixin, Base):
     relocation_ok: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default=CandidateStatus.ACTIVE.value)
 
-    education: Mapped[list["CandidateEducation"]] = relationship(
-        back_populates="candidate", cascade="all, delete-orphan"
-    )
+    education: Mapped[list["CandidateEducation"]] = relationship(back_populates="candidate", cascade="all, delete-orphan")
     tags: Mapped[list["CandidateTag"]] = relationship(back_populates="candidate", cascade="all, delete-orphan")
     notes: Mapped[list["CandidateNote"]] = relationship(back_populates="candidate", cascade="all, delete-orphan")
-    documents: Mapped[list["CandidateDocument"]] = relationship(
-        back_populates="candidate", cascade="all, delete-orphan"
-    )
+    documents: Mapped[list["CandidateDocument"]] = relationship(back_populates="candidate", cascade="all, delete-orphan")
 
 
 class CandidateEducation(Base):
@@ -108,9 +103,7 @@ class CandidateDocument(TimestampMixin, Base):
 
 class DuplicateCandidateLink(TimestampMixin, Base):
     __tablename__ = "duplicate_candidate_links"
-    __table_args__ = (
-        UniqueConstraint("candidate_id", "duplicate_of_candidate_id", name="uq_duplicate_candidate_pair"),
-    )
+    __table_args__ = (UniqueConstraint("candidate_id", "duplicate_of_candidate_id", name="uq_duplicate_candidate_pair"),)
 
     id: Mapped[uuid.UUID] = uuid_pk()
     organization_id: Mapped[uuid.UUID] = mapped_column(

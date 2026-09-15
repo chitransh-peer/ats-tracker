@@ -5,6 +5,8 @@ export interface AuditLogFilters {
   action?: string;
   resource_type?: string;
   actor_user_id?: string;
+  limit?: number;
+  offset?: number;
 }
 
 function buildQuery(params: object): string {
@@ -18,6 +20,16 @@ function buildQuery(params: object): string {
 
 export function listAuditLogs(filters: AuditLogFilters = {}) {
   return apiClient.get<AuditLogEntry[]>(`/audit-logs${buildQuery(filters)}`);
+}
+
+export function listAuditLogsPage(filters: AuditLogFilters = {}) {
+  return apiClient.getPage<AuditLogEntry>(
+    `/audit-logs${buildQuery({
+      ...filters,
+      limit: filters.limit?.toString(),
+      offset: filters.offset?.toString(),
+    })}`,
+  );
 }
 
 export function listAuditSummaryByUser() {

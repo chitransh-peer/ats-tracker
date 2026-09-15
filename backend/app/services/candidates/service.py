@@ -52,9 +52,7 @@ def _scope_filter(query, viewer: CurrentUser | None):
 
 
 def _load(query):
-    return query.options(
-        selectinload(Candidate.education), selectinload(Candidate.tags), selectinload(Candidate.notes)
-    )
+    return query.options(selectinload(Candidate.education), selectinload(Candidate.tags), selectinload(Candidate.notes))
 
 
 def find_duplicates(db: Session, organization_id: uuid.UUID, *, email: str, phone: str | None) -> list[Candidate]:
@@ -122,6 +120,38 @@ def get_candidate(
     return candidate
 
 
+def build_candidates_query(
+    organization_id: uuid.UUID,
+    *,
+    status: str | None = None,
+    talent_pool_only: bool = False,
+    search: str | None = None,
+    viewer: CurrentUser | None = None,
+):
+    """Filters + scoping only, unexecuted — shared by the paginated route and
+    any caller that still needs the full result set (dropdowns, ID-lookup
+    maps). Keeping this separate from execution means both paths stay in sync
+    as filters evolve."""
+    query = _load(select(Candidate)).where(Candidate.organization_id == organization_id, Candidate.deleted_at.is_(None))
+    if status is not None:
+        query = query.where(Candidate.status == status)
+    if talent_pool_only:
+        query = query.where(Candidate.status.in_(_TALENT_POOL_STATUSES))
+    if search:
+        like = f"%{search}%"
+        query = query.where((Candidate.full_name.ilike(like)) | (Candidate.email.ilike(like)))
+    query = _scope_filter(query, viewer)
+    return query.order_by(Candidate.created_at.desc())
+
+
+# Safety ceiling for callers that do not paginate explicitly (dropdowns,
+# candidate-id lookup maps elsewhere in the app). Real pagination lives in the
+# `/candidates` route via `build_candidates_query` + `paginate()`; this just
+# stops an unbounded query from shipping the entire table to a client that
+# only asked for "give me candidates" with no limit in mind.
+_UNPAGINATED_SAFETY_LIMIT = 1000
+
+
 def list_candidates(
     db: Session,
     organization_id: uuid.UUID,
@@ -131,19 +161,10 @@ def list_candidates(
     search: str | None = None,
     viewer: CurrentUser | None = None,
 ) -> list[Candidate]:
-    query = _load(select(Candidate)).where(
-        Candidate.organization_id == organization_id, Candidate.deleted_at.is_(None)
+    query = build_candidates_query(
+        organization_id, status=status, talent_pool_only=talent_pool_only, search=search, viewer=viewer
     )
-    if status is not None:
-        query = query.where(Candidate.status == status)
-    if talent_pool_only:
-        query = query.where(Candidate.status.in_(_TALENT_POOL_STATUSES))
-    if search:
-        like = f"%{search}%"
-        query = query.where((Candidate.full_name.ilike(like)) | (Candidate.email.ilike(like)))
-    query = _scope_filter(query, viewer)
-    query = query.order_by(Candidate.created_at.desc())
-    return list(db.scalars(query).all())
+    return list(db.scalars(query.limit(_UNPAGINATED_SAFETY_LIMIT)).unique().all())
 
 
 def update_candidate(db: Session, candidate: Candidate, *, actor_id: uuid.UUID | None, **fields) -> Candidate:
@@ -167,9 +188,7 @@ def add_note(db: Session, candidate: Candidate, *, author_id: uuid.UUID | None, 
 def list_notes(db: Session, candidate: Candidate) -> list[CandidateNote]:
     return list(
         db.scalars(
-            select(CandidateNote)
-            .where(CandidateNote.candidate_id == candidate.id)
-            .order_by(CandidateNote.created_at.desc())
+            select(CandidateNote).where(CandidateNote.candidate_id == candidate.id).order_by(CandidateNote.created_at.desc())
         ).all()
     )
 

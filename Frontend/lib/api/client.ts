@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 const ACCESS_TOKEN_KEY = "ats_access_token";
 const REFRESH_TOKEN_KEY = "ats_refresh_token";
@@ -54,6 +54,16 @@ export function setViewAsToken(accessToken: string, roleName: string) {
 export function clearViewAsToken() {
   localStorage.removeItem(VIEW_AS_TOKEN_KEY);
   localStorage.removeItem(VIEW_AS_ROLE_KEY);
+}
+
+/**
+ * Auth headers for requests made outside `apiClient` — file downloads that need
+ * to read response headers and build a Blob. Mirrors the token precedence used
+ * by `request`, so a role-preview session downloads as that role.
+ */
+export function authHeaders(): HeadersInit {
+  const token = getViewAsToken() ?? getAccessToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 let refreshPromise: Promise<string | null> | null = null;
@@ -139,8 +149,42 @@ async function request<T>(
   return (await res.json()) as T;
 }
 
+/**
+ * Like `request`, but for list endpoints that report their total row count on
+ * the `X-Total-Count` header (see backend `app/core/pagination.py`). Kept
+ * separate from `request` rather than changing its return shape, since the
+ * vast majority of callers just want the array.
+ */
+async function requestPage<T>(
+  path: string,
+  allowRetry = true,
+): Promise<{ data: T[]; total: number }> {
+  const token = getViewAsToken() ?? getAccessToken();
+  const headers = new Headers();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const res = await fetch(`${API_BASE}${path}`, { method: "GET", headers });
+
+  if (res.status === 401 && allowRetry) {
+    const newToken = await refreshAccessToken();
+    if (newToken) return requestPage<T>(path, false);
+    clearTokens();
+    if (typeof window !== "undefined") window.location.href = "/auth/login";
+    throw new ApiError(401, null, "Session expired");
+  }
+
+  if (!res.ok) {
+    throw new ApiError(res.status, null, res.statusText);
+  }
+
+  const data = (await res.json()) as T[];
+  const totalHeader = res.headers.get("X-Total-Count");
+  return { data, total: totalHeader ? Number(totalHeader) : data.length };
+}
+
 export const apiClient = {
   get: <T>(path: string) => request<T>(path, { method: "GET" }),
+  getPage: <T>(path: string) => requestPage<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, {
       method: "POST",
@@ -156,6 +200,7 @@ export const apiClient = {
       method: "PUT",
       body: body !== undefined ? JSON.stringify(body) : undefined,
     }),
+  delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
   postForm: <T>(path: string, formData: FormData) =>
     request<T>(path, { method: "POST", body: formData }),
   /** Always authenticates with the real (non-preview) token — for calls that

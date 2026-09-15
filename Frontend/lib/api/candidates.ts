@@ -1,10 +1,18 @@
 import { apiClient } from "./client";
-import type { Candidate, CandidateCreateInput, CandidateNote } from "./types";
+import type {
+  Candidate,
+  CandidateCreateInput,
+  CandidateNote,
+  OutboundMessage,
+  SendMessageInput,
+} from "./types";
 
 export interface CandidateFilters {
   status?: string;
   pool?: boolean;
   search?: string;
+  limit?: number;
+  offset?: number;
 }
 
 function buildQuery(params: Record<string, string | undefined>): string {
@@ -14,6 +22,18 @@ function buildQuery(params: Record<string, string | undefined>): string {
   }
   const qs = query.toString();
   return qs ? `?${qs}` : "";
+}
+
+export function listCandidatesPage(filters: CandidateFilters = {}) {
+  return apiClient.getPage<Candidate>(
+    `/candidates${buildQuery({
+      status: filters.status,
+      pool: filters.pool ? "true" : undefined,
+      search: filters.search,
+      limit: filters.limit?.toString(),
+      offset: filters.offset?.toString(),
+    })}`,
+  );
 }
 
 export function listCandidates(filters: CandidateFilters = {}) {
@@ -58,4 +78,12 @@ export function uploadCandidateDocument(candidateId: string, file: File, documen
   formData.append("file", file);
   formData.append("document_type", documentType);
   return apiClient.postForm(`/candidates/${candidateId}/documents`, formData);
+}
+
+export function listCandidateMessages(candidateId: string) {
+  return apiClient.get<OutboundMessage[]>(`/candidates/${candidateId}/messages`);
+}
+
+export function sendCandidateMessage(candidateId: string, input: SendMessageInput) {
+  return apiClient.post<OutboundMessage>(`/candidates/${candidateId}/messages`, input);
 }

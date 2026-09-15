@@ -1,0 +1,31 @@
+# Secrets — must never enter an image layer
+.env
+.env.*
+!.env.example
+
+# Local virtualenvs
+.venv/
+venv/
+ENV/
+
+# Python build artefacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Downloaded ML models (mounted as a volume at runtime instead)
+.model_cache/
+
+# VCS and editor
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Not needed to run the service
+tests/
+docs/
+*.md

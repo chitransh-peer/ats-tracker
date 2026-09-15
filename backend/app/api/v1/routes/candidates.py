@@ -1,10 +1,12 @@
 import uuid
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session, require_permission
 from app.core.enums import AuditAction, CandidateDocumentType, PermissionAction, PermissionResource
+from app.core.file_validation import validate_document_size, validate_resume_upload
+from app.core.pagination import PageParams, page_params, paginate
 from app.schemas.application import ApplicationRead
 from app.schemas.auth import CurrentUser
 from app.schemas.candidate import (
@@ -22,6 +24,7 @@ from app.services.applications.service import list_applications
 from app.services.audit.service import record as record_audit
 from app.services.candidates import service as candidate_service
 from app.services.communication import service as communication_service
+from app.workers.tasks.mail import send_outbound_message_task
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
 
@@ -58,15 +61,22 @@ def _to_read(candidate, duplicate_warnings=None) -> CandidateRead:
 
 @router.get("", response_model=list[CandidateRead])
 def list_candidates(
+    response: Response,
     status: str | None = None,
     pool: bool = False,
     search: str | None = None,
+    pagination: PageParams = Depends(page_params),
     current_user: CurrentUser = Depends(require_permission(PermissionResource.CANDIDATE, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> list[CandidateRead]:
-    candidates = candidate_service.list_candidates(
-        db, current_user.organization_id, status=status, talent_pool_only=pool, search=search, viewer=current_user
+    query = candidate_service.build_candidates_query(
+        current_user.organization_id, status=status, talent_pool_only=pool, search=search, viewer=current_user
     )
+    candidates, total = paginate(db, query, pagination)
+    # Body stays a plain array for backward compatibility; the total rides on
+    # a header so a caller that wants "load more" / page controls can read it
+    # without every existing consumer needing to switch to an envelope shape.
+    response.headers["X-Total-Count"] = str(total)
     return [_to_read(c) for c in candidates]
 
 
@@ -146,17 +156,27 @@ def update_candidate(
 async def upload_document(
     candidate_id: uuid.UUID,
     file: UploadFile = File(...),
-    document_type: str = CandidateDocumentType.RESUME.value,
+    document_type: str = Form(CandidateDocumentType.RESUME.value),
     current_user: CurrentUser = Depends(require_permission(PermissionResource.CANDIDATE, PermissionAction.UPDATE)),
     db: Session = Depends(get_db_session),
 ) -> CandidateDocumentRead:
     candidate = candidate_service.get_candidate(db, current_user.organization_id, candidate_id, viewer=current_user)
     data = await file.read()
+    file_name = file.filename or "document"
+    if document_type == CandidateDocumentType.RESUME.value:
+        # Résumés are format-restricted to PDF/DOC/DOCX with a magic-byte
+        # check; this also covers the size cap.
+        validate_resume_upload(data=data, file_name=file_name)
+    else:
+        # "Other" documents (offer letters signed elsewhere, ID scans, etc.)
+        # aren't limited to a specific format, but every upload still gets a
+        # blanket size cap so nothing fills the disk regardless of type.
+        validate_document_size(data=data)
     document = candidate_service.add_document(
         db,
         candidate,
         document_type=document_type,
-        file_name=file.filename or "document",
+        file_name=file_name,
         content_type=file.content_type or "application/octet-stream",
         data=data,
         uploaded_by=current_user.id,
@@ -226,7 +246,7 @@ def send_message(
     db: Session = Depends(get_db_session),
 ) -> OutboundMessageRead:
     candidate_service.get_candidate(db, current_user.organization_id, candidate_id, viewer=current_user)
-    return communication_service.log_message(
+    message = communication_service.log_message(
         db,
         organization_id=current_user.organization_id,
         sent_by=current_user.id,
@@ -236,3 +256,7 @@ def send_message(
         subject=payload.subject,
         body=payload.body,
     )
+    # The row is always written first, so the outreach is recorded even if
+    # delivery later fails; the worker flips status to sent/failed.
+    send_outbound_message_task.send(str(message.id))
+    return message

@@ -21,9 +21,7 @@ _ADMIN_RESTRICTED: set[Permission] = {
 }
 
 _EXECUTIVE_READ_ONLY: set[Permission] = {
-    (r, PermissionAction.READ)
-    for r in _ALL_RESOURCES
-    if r not in {PermissionResource.SETTINGS}
+    (r, PermissionAction.READ) for r in _ALL_RESOURCES if r not in {PermissionResource.SETTINGS}
 }
 
 _RECRUITER_OPERATIONAL: set[Permission] = {
@@ -51,9 +49,19 @@ _RECRUITER_OPERATIONAL: set[Permission] = {
     (PermissionResource.ONBOARDING, PermissionAction.UPDATE),
     (PermissionResource.TEMPLATE, PermissionAction.READ),
     (PermissionResource.TEMPLATE, PermissionAction.CREATE),
+    # Recruiters own their outreach copy; deleting stays with admins.
+    (PermissionResource.TEMPLATE, PermissionAction.UPDATE),
     (PermissionResource.CLIENT, PermissionAction.READ),
     (PermissionResource.VENDOR, PermissionAction.READ),
     (PermissionResource.REPORT, PermissionAction.READ),
+    # Bench sales is a recruiter's job. Row-level visibility is narrowed
+    # further by ownership in the bench service; this only grants entry.
+    (PermissionResource.TALENT_BENCH, PermissionAction.CREATE),
+    (PermissionResource.TALENT_BENCH, PermissionAction.READ),
+    (PermissionResource.TALENT_BENCH, PermissionAction.UPDATE),
+    (PermissionResource.HOTLIST, PermissionAction.CREATE),
+    (PermissionResource.HOTLIST, PermissionAction.READ),
+    (PermissionResource.HOTLIST, PermissionAction.UPDATE),
 }
 
 _HIRING_MANAGER_JOB_SCOPED: set[Permission] = {
@@ -67,6 +75,7 @@ _HIRING_MANAGER_JOB_SCOPED: set[Permission] = {
     (PermissionResource.OFFER, PermissionAction.READ),
     (PermissionResource.OFFER, PermissionAction.CREATE),
     (PermissionResource.ONBOARDING, PermissionAction.READ),
+    (PermissionResource.TALENT_BENCH, PermissionAction.READ),
 }
 
 _INTERVIEWER_SCOPED: set[Permission] = {

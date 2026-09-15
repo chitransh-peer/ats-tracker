@@ -34,9 +34,17 @@ def get_template(db: Session, organization_id: uuid.UUID, template_id: uuid.UUID
 def list_templates(db: Session, organization_id: uuid.UUID) -> list[CommunicationTemplate]:
     return list(
         db.scalars(
-            select(CommunicationTemplate).where(CommunicationTemplate.organization_id == organization_id)
+            select(CommunicationTemplate)
+            .where(CommunicationTemplate.organization_id == organization_id)
+            .order_by(CommunicationTemplate.name)
         ).all()
     )
+
+
+def delete_template(db: Session, template: CommunicationTemplate) -> None:
+    """Messages already sent from this template keep their copy — the FK nulls out."""
+    db.delete(template)
+    db.commit()
 
 
 def update_template(db: Session, template: CommunicationTemplate, **fields) -> CommunicationTemplate:

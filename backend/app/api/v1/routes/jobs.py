@@ -35,18 +35,12 @@ def _to_read(db: Session, job) -> JobRead:
     stats = job_service.job_stats(db, job.id)
     assigned_names = job_service_user_names(db, job.assigned_to_ids)
     return JobRead(
-        **{
-            column.name: getattr(job, column.name)
-            for column in job.__table__.columns
-            if column.name not in _SKIP_COLUMNS
-        },
+        **{column.name: getattr(job, column.name) for column in job.__table__.columns if column.name not in _SKIP_COLUMNS},
         created_by=job.created_by,
         updated_by=job.updated_by,
         client_name=job.client.name if job.client else None,
         sales_manager_name=job.sales_manager.full_name if job.sales_manager else None,
-        recruitment_manager_name=(
-            job.recruitment_manager.full_name if job.recruitment_manager else None
-        ),
+        recruitment_manager_name=(job.recruitment_manager.full_name if job.recruitment_manager else None),
         account_manager_name=job.account_manager.full_name if job.account_manager else None,
         primary_recruiter_name=job.primary_recruiter.full_name if job.primary_recruiter else None,
         assigned_to_names=[assigned_names[uid] for uid in job.assigned_to_ids if uid in assigned_names],
@@ -183,19 +177,31 @@ def _transition_route(transition_fn, audit_action: AuditAction):
 
 
 router.add_api_route(
-    "/{job_id}/publish", _transition_route(job_service.publish_job, AuditAction.JOB_PUBLISHED), methods=["POST"], response_model=JobRead
+    "/{job_id}/publish",
+    _transition_route(job_service.publish_job, AuditAction.JOB_PUBLISHED),
+    methods=["POST"],
+    response_model=JobRead,
 )
 router.add_api_route(
-    "/{job_id}/unpublish", _transition_route(job_service.unpublish_job, AuditAction.JOB_UNPUBLISHED), methods=["POST"], response_model=JobRead
+    "/{job_id}/unpublish",
+    _transition_route(job_service.unpublish_job, AuditAction.JOB_UNPUBLISHED),
+    methods=["POST"],
+    response_model=JobRead,
 )
 router.add_api_route(
-    "/{job_id}/close", _transition_route(job_service.close_job, AuditAction.JOB_CLOSED), methods=["POST"], response_model=JobRead
+    "/{job_id}/close",
+    _transition_route(job_service.close_job, AuditAction.JOB_CLOSED),
+    methods=["POST"],
+    response_model=JobRead,
 )
 router.add_api_route(
     "/{job_id}/hold", _transition_route(job_service.hold_job, AuditAction.JOB_HELD), methods=["POST"], response_model=JobRead
 )
 router.add_api_route(
-    "/{job_id}/cancel", _transition_route(job_service.cancel_job, AuditAction.JOB_CANCELLED), methods=["POST"], response_model=JobRead
+    "/{job_id}/cancel",
+    _transition_route(job_service.cancel_job, AuditAction.JOB_CANCELLED),
+    methods=["POST"],
+    response_model=JobRead,
 )
 
 
@@ -295,6 +301,4 @@ def set_job_custom_field(
     db: Session = Depends(get_db_session),
 ) -> JobCustomFieldRead:
     job = job_service.get_job(db, current_user.organization_id, job_id, viewer=current_user)
-    return job_service.set_custom_field(
-        db, job, field_name=payload.field_name, field_value=payload.field_value
-    )
+    return job_service.set_custom_field(db, job, field_name=payload.field_name, field_value=payload.field_value)

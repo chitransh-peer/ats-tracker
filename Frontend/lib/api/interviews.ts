@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import type { Interview } from "./types";
+import type { ConsolidatedFeedback, Interview } from "./types";
 
 export interface InterviewFilters {
   application_id?: string;
@@ -42,4 +42,12 @@ export function submitInterviewFeedback(
   input: { rating: number; recommendation: string; notes?: string },
 ) {
   return apiClient.post(`/interviews/${interviewId}/feedback`, input);
+}
+
+export function getInterview(interviewId: string) {
+  return apiClient.get<Interview>(`/interviews/${interviewId}`);
+}
+
+export function getConsolidatedFeedback(interviewId: string) {
+  return apiClient.get<ConsolidatedFeedback>(`/interviews/${interviewId}/consolidated-feedback`);
 }

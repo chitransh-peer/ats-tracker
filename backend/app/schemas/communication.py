@@ -13,6 +13,7 @@ class TemplateCreate(BaseModel):
 
 class TemplateUpdate(BaseModel):
     name: str | None = None
+    type: str | None = None
     subject: str | None = None
     body: str | None = None
 

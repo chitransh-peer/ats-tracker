@@ -70,9 +70,7 @@ class Vendor(TimestampMixin, AuditedByMixin, Base):
     notes: Mapped[list["VendorNote"]] = relationship(back_populates="vendor", cascade="all, delete-orphan")
     documents: Mapped[list["VendorDocument"]] = relationship(back_populates="vendor", cascade="all, delete-orphan")
     meetings: Mapped[list["VendorMeeting"]] = relationship(back_populates="vendor", cascade="all, delete-orphan")
-    bank_accounts: Mapped[list["VendorBankAccount"]] = relationship(
-        back_populates="vendor", cascade="all, delete-orphan"
-    )
+    bank_accounts: Mapped[list["VendorBankAccount"]] = relationship(back_populates="vendor", cascade="all, delete-orphan")
     primary_owner: Mapped["User"] = relationship(foreign_keys=[primary_owner_id])
     ownership: Mapped["User"] = relationship(foreign_keys=[ownership_id])
     vendor_lead: Mapped["User"] = relationship(foreign_keys=[vendor_lead_id])
@@ -132,9 +130,7 @@ class VendorNote(TimestampMixin, Base):
     )
     action: Mapped[str | None] = mapped_column(String(100), nullable=True)
     body: Mapped[str] = mapped_column(Text, nullable=False)
-    notified_user_ids: Mapped[list[uuid.UUID]] = mapped_column(
-        ARRAY(UUID(as_uuid=True)), nullable=False, default=list
-    )
+    notified_user_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=False, default=list)
 
     vendor: Mapped["Vendor"] = relationship(back_populates="notes")
     author: Mapped["User"] = relationship()
@@ -170,9 +166,7 @@ class VendorMeeting(TimestampMixin, Base):
     contact_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("vendor_contacts.id", ondelete="SET NULL"), nullable=True
     )
-    attendee_ids: Mapped[list[uuid.UUID]] = mapped_column(
-        ARRAY(UUID(as_uuid=True)), nullable=False, default=list
-    )
+    attendee_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=False, default=list)
     guest_attendees: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)

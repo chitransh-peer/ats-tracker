@@ -1,8 +1,7 @@
 import { apiClient } from "./client";
 
 /** Slug of the organization whose careers page is public-facing. */
-export const CAREERS_ORG_SLUG =
-  process.env.NEXT_PUBLIC_CAREERS_ORG_SLUG ?? "peer-consulting";
+export const CAREERS_ORG_SLUG = process.env.NEXT_PUBLIC_CAREERS_ORG_SLUG ?? "peer-consulting";
 
 export interface PublicJob {
   id: string;

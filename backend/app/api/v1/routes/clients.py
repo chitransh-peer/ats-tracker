@@ -117,9 +117,7 @@ def update_client(
     db: Session = Depends(get_db_session),
 ) -> ClientRead:
     client = client_service.get_client(db, current_user.organization_id, client_id)
-    client_service.update_client(
-        db, client, actor_id=current_user.id, **payload.model_dump(exclude_unset=True)
-    )
+    client_service.update_client(db, client, actor_id=current_user.id, **payload.model_dump(exclude_unset=True))
     return _to_read(db, client_service.get_client(db, current_user.organization_id, client_id))
 
 

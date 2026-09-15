@@ -26,6 +26,7 @@ import {
   Bell,
   Plus,
   ChevronRight,
+  Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,16 +57,30 @@ function formatRoleLabel(role: string) {
 
 // Role visibility per nav item, mirroring the backend permission matrix so the
 // sidebar only shows what a role can actually use. `roles: undefined` = everyone.
-const ALL_INTERNAL = ["super_admin", "admin", "executive", "recruiter", "hiring_manager", "interviewer"];
+const ALL_INTERNAL = [
+  "super_admin",
+  "admin",
+  "executive",
+  "recruiter",
+  "hiring_manager",
+  "interviewer",
+];
 const CORE = ["super_admin", "admin", "executive", "recruiter", "hiring_manager"];
 const OPS = ["super_admin", "admin", "executive", "recruiter"];
 const ADMIN_ONLY = ["super_admin", "admin"];
+// Mirrors the server-side permission matrix. The nav only hides links; the
+// API enforces access, and bench rows are further filtered by ownership.
+const BENCH_VIEWERS = ["super_admin", "admin", "executive", "recruiter", "hiring_manager"];
+const HOTLIST_USERS = ["super_admin", "admin", "executive", "recruiter"];
 
 type NavItem = { to: string; label: string; icon: typeof LayoutDashboard; roles?: string[] };
 type NavSection = { section: string; items: NavItem[] };
 
 const nav: NavSection[] = [
-  { section: "Overview", items: [{ to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ALL_INTERNAL }] },
+  {
+    section: "Overview",
+    items: [{ to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ALL_INTERNAL }],
+  },
   {
     section: "Hiring",
     items: [
@@ -77,6 +92,13 @@ const nav: NavSection[] = [
       { to: "/interviews", label: "Interviews", icon: Calendar, roles: ALL_INTERNAL },
       { to: "/offers", label: "Offers", icon: FileSignature, roles: CORE },
       { to: "/onboarding", label: "Onboarding", icon: ClipboardCheck, roles: CORE },
+    ],
+  },
+  {
+    section: "Bench Sales",
+    items: [
+      { to: "/talent-bench", label: "Talent Bench", icon: Users, roles: BENCH_VIEWERS },
+      { to: "/hotlists", label: "Hotlists", icon: Send, roles: HOTLIST_USERS },
     ],
   },
   {
@@ -138,14 +160,20 @@ export function AppShell({
     .slice(0, 2)
     .toUpperCase();
   const isRealSuperAdmin = user.roles.includes("super_admin");
-  const roleLabel = viewAsRole ? formatRoleLabel(viewAsRole) : (user.roles[0] ? formatRoleLabel(user.roles[0]) : "Member");
+  const roleLabel = viewAsRole
+    ? formatRoleLabel(viewAsRole)
+    : user.roles[0]
+      ? formatRoleLabel(user.roles[0])
+      : "Member";
 
   // When previewing via "View as", the sidebar reflects the previewed role only.
   const effectiveRoles = viewAsRole ? [viewAsRole] : user.roles;
   const visibleNav = nav
     .map((sec) => ({
       ...sec,
-      items: sec.items.filter((it) => !it.roles || it.roles.some((r) => effectiveRoles.includes(r))),
+      items: sec.items.filter(
+        (it) => !it.roles || it.roles.some((r) => effectiveRoles.includes(r)),
+      ),
     }))
     .filter((sec) => sec.items.length > 0);
 
@@ -214,7 +242,8 @@ export function AppShell({
         {viewAsRole && (
           <div className="h-9 shrink-0 bg-amber-500 text-amber-950 flex items-center justify-center gap-3 text-xs font-medium px-4 sticky top-0 z-30">
             <Sparkles className="h-3.5 w-3.5" />
-            Viewing as {formatRoleLabel(viewAsRole)} — permissions and data are restricted to this role
+            Viewing as {formatRoleLabel(viewAsRole)} — permissions and data are restricted to this
+            role
             <Button
               size="sm"
               variant="outline"

@@ -2,6 +2,7 @@ from app.db.base import Base
 from app.db.models.ai import AIEvaluation, AIEvaluationOverride, ParsedResume, ResumeParseRun
 from app.db.models.application import Application, ApplicationStageHistory
 from app.db.models.audit_log import AuditLog
+from app.db.models.bench import BenchProfile, BenchProfileOwner, BenchSubmission
 from app.db.models.candidate import (
     Candidate,
     CandidateDocument,
@@ -19,6 +20,13 @@ from app.db.models.client import (
     ClientNote,
 )
 from app.db.models.communication import CommunicationTemplate, OutboundMessage
+from app.db.models.hotlist import (
+    Hotlist,
+    HotlistDelivery,
+    HotlistMember,
+    HotlistRecipient,
+    HotlistSend,
+)
 from app.db.models.interview import Interview, InterviewFeedback, InterviewPanelMember
 from app.db.models.invitation import Invitation
 from app.db.models.job import Job, JobCustomField, JobDocument, JobNote, JobSearchCriteria
@@ -95,4 +103,12 @@ __all__ = [
     "ParsedResume",
     "AIEvaluation",
     "AIEvaluationOverride",
+    "BenchProfile",
+    "BenchProfileOwner",
+    "BenchSubmission",
+    "Hotlist",
+    "HotlistDelivery",
+    "HotlistMember",
+    "HotlistRecipient",
+    "HotlistSend",
 ]

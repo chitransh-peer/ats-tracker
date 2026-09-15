@@ -17,8 +17,10 @@ def test_public_job_listing_only_shows_active_jobs(client, make_user, auth_heade
     user, password = make_user(role_names=[RoleName.RECRUITER.value])
     headers = auth_headers(user.email, password)
 
-    published = _publish_job(client, headers, title="Published Role")
-    client.post("/api/v1/jobs", json={"title": "Draft Role", "workplace": "Remote", "employment_type": "Full-time"}, headers=headers)
+    _publish_job(client, headers, title="Published Role")
+    client.post(
+        "/api/v1/jobs", json={"title": "Draft Role", "workplace": "Remote", "employment_type": "Full-time"}, headers=headers
+    )
 
     response = client.get(f"/api/v1/careers/{organization.slug}/jobs")
 

@@ -61,3 +61,23 @@ def update_template(
     )
     db.commit()
     return template
+
+
+@router.delete("/{template_id}", status_code=204)
+def delete_template(
+    template_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_permission(PermissionResource.TEMPLATE, PermissionAction.DELETE)),
+    db: Session = Depends(get_db_session),
+) -> None:
+    template = communication_service.get_template(db, current_user.organization_id, template_id)
+    # Record before the delete so the audit row survives even though the template won't.
+    record_audit(
+        db,
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action=AuditAction.TEMPLATE_DELETED.value,
+        resource_type="template",
+        resource_id=str(template.id),
+        metadata={"name": template.name, "type": template.type},
+    )
+    communication_service.delete_template(db, template)

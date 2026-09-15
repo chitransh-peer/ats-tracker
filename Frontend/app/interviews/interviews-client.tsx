@@ -227,9 +227,11 @@ export function InterviewsClient() {
                     </td>
                     <td className="p-3 text-xs">{job?.title ?? "—"}</td>
                     <td className="p-3">
-                      <Badge variant="secondary" className="text-[10px]">
-                        {iv.round_name}
-                      </Badge>
+                      <Link href={`/interviews/${iv.id}`} className="hover:underline">
+                        <Badge variant="secondary" className="text-[10px]">
+                          {iv.round_name}
+                        </Badge>
+                      </Link>
                     </td>
                     <td className="p-3 text-xs">{new Date(iv.scheduled_at).toLocaleString()}</td>
                     <td className="p-3 text-xs">
@@ -252,7 +254,12 @@ export function InterviewsClient() {
                           {iv.feedback_entries[0].recommendation}
                         </Badge>
                       ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
+                        <Link
+                          href={`/interviews/${iv.id}`}
+                          className="text-xs text-primary hover:underline"
+                        >
+                          Add feedback
+                        </Link>
                       )}
                     </td>
                   </tr>

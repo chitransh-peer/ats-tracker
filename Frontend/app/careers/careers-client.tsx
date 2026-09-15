@@ -23,13 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Building2, MapPin, Briefcase, Search, CheckCircle2 } from "lucide-react";
 
-function ApplyDialog({
-  job,
-  onClose,
-}: {
-  job: PublicJob | null;
-  onClose: () => void;
-}) {
+function ApplyDialog({ job, onClose }: { job: PublicJob | null; onClose: () => void }) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -67,7 +61,8 @@ function ApplyDialog({
             <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto" />
             <DialogTitle>Application received</DialogTitle>
             <p className="text-sm text-muted-foreground">
-              Thanks for applying to {job?.title}. Our team will review your profile and be in touch.
+              Thanks for applying to {job?.title}. Our team will review your profile and be in
+              touch.
             </p>
             <Button onClick={handleClose}>Close</Button>
           </div>
@@ -92,7 +87,12 @@ function ApplyDialog({
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-xs">Email</Label>
-                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Phone</Label>
@@ -124,7 +124,10 @@ function ApplyDialog({
 }
 
 export function CareersClient() {
-  const { data: org } = useQuery({ queryKey: ["public-org"], queryFn: () => getPublicOrganization() });
+  const { data: org } = useQuery({
+    queryKey: ["public-org"],
+    queryFn: () => getPublicOrganization(),
+  });
   const { data: jobs, isLoading } = useQuery({
     queryKey: ["public-jobs"],
     queryFn: () => listPublicJobs(),
@@ -188,7 +191,9 @@ export function CareersClient() {
           </div>
         </div>
         <div className="border rounded-lg divide-y bg-white">
-          {isLoading && <div className="p-6 text-center text-sm text-muted-foreground">Loading…</div>}
+          {isLoading && (
+            <div className="p-6 text-center text-sm text-muted-foreground">Loading…</div>
+          )}
           {!isLoading && filtered.length === 0 && (
             <div className="p-6 text-center text-sm text-muted-foreground">
               No open roles right now. Check back soon.

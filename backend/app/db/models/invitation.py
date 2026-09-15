@@ -5,8 +5,8 @@ from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base, TimestampMixin, uuid_pk
 from app.core.enums import InvitationStatus
+from app.db.base import Base, TimestampMixin, uuid_pk
 
 
 class Invitation(TimestampMixin, Base):

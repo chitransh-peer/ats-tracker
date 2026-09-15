@@ -9,9 +9,7 @@ from app.db.models.organization import Organization
 
 def get_organization(db: Session, organization_id: uuid.UUID) -> Organization:
     org = db.scalar(
-        select(Organization)
-        .where(Organization.id == organization_id)
-        .options(selectinload(Organization.settings))
+        select(Organization).where(Organization.id == organization_id).options(selectinload(Organization.settings))
     )
     if org is None:
         raise NotFoundError("Organization not found")

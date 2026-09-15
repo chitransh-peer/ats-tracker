@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session
+from app.core.rate_limit import limiter
 from app.db.models import Base
 from app.db.models.organization import Organization, OrganizationSettings
 from app.db.session import SessionLocal, engine
@@ -16,6 +17,17 @@ from app.services.jobs.service import create_job
 from app.services.pipeline.service import seed_default_stage_template
 from app.services.roles.service import seed_roles_and_permissions
 from app.services.users.service import create_user
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _disable_rate_limiting():
+    """The auth fixtures below log in once per test — 100+ logins in a run,
+    easily well past the login endpoint's real 10/minute limit. That limit
+    exists for a live attacker, not the test suite, so it is switched off for
+    the whole session rather than tuned around."""
+    limiter.enabled = False
+    yield
+    limiter.enabled = True
 
 
 @pytest.fixture(scope="session", autouse=True)

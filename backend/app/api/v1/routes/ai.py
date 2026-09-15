@@ -4,8 +4,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session, require_permission
+from app.core.config import get_settings
 from app.core.enums import AuditAction, PermissionAction, PermissionResource
 from app.schemas.ai import (
+    AIConfigRead,
     AIEvaluationOverrideRequest,
     AIEvaluationRead,
     JDResumeComparisonRead,
@@ -21,6 +23,23 @@ from app.workers.tasks.ai import evaluate_application_task, parse_resume_task
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 
+@router.get("/config", response_model=AIConfigRead)
+def ai_config(
+    current_user: CurrentUser = Depends(require_permission(PermissionResource.SETTINGS, PermissionAction.READ)),
+) -> AIConfigRead:
+    """Read-only view of the active AI configuration. Deliberately excludes API
+    keys — this is for confirming which model is scoring, not for managing secrets."""
+    settings = get_settings()
+    model = settings.ollama_model if settings.ai_provider == "ollama" else settings.openrouter_model
+    return AIConfigRead(
+        provider=settings.ai_provider,
+        model=model or "not configured",
+        embeddings_enabled=settings.embeddings_enabled,
+        embeddings_model=settings.embeddings_model if settings.embeddings_enabled else None,
+        evaluation_skill_weight=settings.evaluation_skill_weight,
+    )
+
+
 @router.post("/parse-resume", response_model=ResumeParseRunRead, status_code=202)
 def parse_resume(
     payload: ParseResumeRequest,
@@ -28,7 +47,9 @@ def parse_resume(
     db: Session = Depends(get_db_session),
 ) -> ResumeParseRunRead:
     run = resume_parsing_service.create_pending_run(
-        db, organization_id=current_user.organization_id, candidate_id=payload.candidate_id,
+        db,
+        organization_id=current_user.organization_id,
+        candidate_id=payload.candidate_id,
         document_id=payload.document_id,
     )
     record_audit(

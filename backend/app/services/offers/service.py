@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from sqlalchemy import false, select
 from sqlalchemy.orm import Session, selectinload
@@ -65,8 +65,14 @@ def create_offer(
     db.flush()
     db.add(
         OfferVersion(
-            offer_id=offer.id, version_number=1, base_salary=base_salary, bonus=bonus, equity=equity,
-            joining_date=joining_date, created_by=actor_id, created_at=datetime.now(timezone.utc),
+            offer_id=offer.id,
+            version_number=1,
+            base_salary=base_salary,
+            bonus=bonus,
+            equity=equity,
+            joining_date=joining_date,
+            created_by=actor_id,
+            created_at=datetime.now(UTC),
         )
     )
     db.commit()
@@ -74,9 +80,7 @@ def create_offer(
     return offer
 
 
-def get_offer(
-    db: Session, organization_id: uuid.UUID, offer_id: uuid.UUID, *, viewer: CurrentUser | None = None
-) -> Offer:
+def get_offer(db: Session, organization_id: uuid.UUID, offer_id: uuid.UUID, *, viewer: CurrentUser | None = None) -> Offer:
     query = _load(select(Offer)).where(Offer.id == offer_id, Offer.organization_id == organization_id)
     offer = db.scalar(_scope_filter(query, viewer))
     if offer is None:
@@ -114,9 +118,14 @@ def update_offer(db: Session, offer: Offer, *, actor_id: uuid.UUID | None, **fie
     next_version = (max((v.version_number for v in offer.versions), default=0)) + 1
     db.add(
         OfferVersion(
-            offer_id=offer.id, version_number=next_version, base_salary=offer.base_salary, bonus=offer.bonus,
-            equity=offer.equity, joining_date=offer.joining_date, created_by=actor_id,
-            created_at=datetime.now(timezone.utc),
+            offer_id=offer.id,
+            version_number=next_version,
+            base_salary=offer.base_salary,
+            bonus=offer.bonus,
+            equity=offer.equity,
+            joining_date=offer.joining_date,
+            created_by=actor_id,
+            created_at=datetime.now(UTC),
         )
     )
     db.commit()
@@ -131,8 +140,11 @@ def submit_for_approval(db: Session, offer: Offer, *, actor_id: uuid.UUID | None
     offer.status = OfferStatus.APPROVAL_PENDING.value
     db.add(
         OfferApproval(
-            offer_id=offer.id, requested_by=actor_id, status=OfferApprovalStatus.PENDING.value, note=note,
-            created_at=datetime.now(timezone.utc),
+            offer_id=offer.id,
+            requested_by=actor_id,
+            status=OfferApprovalStatus.PENDING.value,
+            note=note,
+            created_at=datetime.now(UTC),
         )
     )
     db.commit()
@@ -146,13 +158,17 @@ def _latest_approval(offer: Offer) -> OfferApproval | None:
 
 def approve_offer(db: Session, offer: Offer, *, approver_id: uuid.UUID | None, note: str | None) -> Offer:
     approval = _latest_approval(offer)
-    if offer.status != OfferStatus.APPROVAL_PENDING.value or approval is None or approval.status != OfferApprovalStatus.PENDING.value:
+    if (
+        offer.status != OfferStatus.APPROVAL_PENDING.value
+        or approval is None
+        or approval.status != OfferApprovalStatus.PENDING.value
+    ):
         raise ValidationAppError("Offer has no pending approval request")
 
     approval.status = OfferApprovalStatus.APPROVED.value
     approval.approver_id = approver_id
     approval.note = note or approval.note
-    approval.decided_at = datetime.now(timezone.utc)
+    approval.decided_at = datetime.now(UTC)
     db.commit()
     db.refresh(offer)
     return offer
@@ -160,13 +176,17 @@ def approve_offer(db: Session, offer: Offer, *, approver_id: uuid.UUID | None, n
 
 def reject_offer(db: Session, offer: Offer, *, approver_id: uuid.UUID | None, note: str | None) -> Offer:
     approval = _latest_approval(offer)
-    if offer.status != OfferStatus.APPROVAL_PENDING.value or approval is None or approval.status != OfferApprovalStatus.PENDING.value:
+    if (
+        offer.status != OfferStatus.APPROVAL_PENDING.value
+        or approval is None
+        or approval.status != OfferApprovalStatus.PENDING.value
+    ):
         raise ValidationAppError("Offer has no pending approval request")
 
     approval.status = OfferApprovalStatus.REJECTED.value
     approval.approver_id = approver_id
     approval.note = note or approval.note
-    approval.decided_at = datetime.now(timezone.utc)
+    approval.decided_at = datetime.now(UTC)
     offer.status = OfferStatus.DRAFT.value
     db.commit()
     db.refresh(offer)
@@ -175,7 +195,11 @@ def reject_offer(db: Session, offer: Offer, *, approver_id: uuid.UUID | None, no
 
 def send_offer(db: Session, offer: Offer) -> Offer:
     approval = _latest_approval(offer)
-    if offer.status != OfferStatus.APPROVAL_PENDING.value or approval is None or approval.status != OfferApprovalStatus.APPROVED.value:
+    if (
+        offer.status != OfferStatus.APPROVAL_PENDING.value
+        or approval is None
+        or approval.status != OfferApprovalStatus.APPROVED.value
+    ):
         raise ValidationAppError("Offer must be approved before it can be sent")
 
     offer.status = OfferStatus.SENT.value

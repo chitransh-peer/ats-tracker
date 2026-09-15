@@ -187,13 +187,28 @@ export function AIReviewClient() {
         <>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
             <StatCard label="Overall match" value={`${Math.round(overallScore)}%`} tone="success" />
-            <StatCard label="Matched skills" value={`${matchedCount}/${totalSkills || matchedCount}`} tone="success" />
-            <StatCard label="Missing skills" value={missingCount} tone={missingCount > 0 ? "warning" : "default"} />
+            <StatCard
+              label="Matched skills"
+              value={`${matchedCount}/${totalSkills || matchedCount}`}
+              tone="success"
+            />
+            <StatCard
+              label="Missing skills"
+              value={missingCount}
+              tone={missingCount > 0 ? "warning" : "default"}
+            />
             <StatCard
               label="Recommendation"
-              value={evaluation.recommendation_label ? evaluation.recommendation_label.replace(/_/g, " ") : "—"}
+              value={
+                evaluation.recommendation_label
+                  ? evaluation.recommendation_label.replace(/_/g, " ")
+                  : "—"
+              }
             />
-            <StatCard label="Confidence" value={evaluation.confidence != null ? `${Math.round(evaluation.confidence)}%` : "—"} />
+            <StatCard
+              label="Confidence"
+              value={evaluation.confidence != null ? `${Math.round(evaluation.confidence)}%` : "—"}
+            />
           </div>
 
           {evaluation.error_message && (
@@ -222,7 +237,8 @@ export function AIReviewClient() {
                       Recommendation:{" "}
                       <span className="font-semibold text-[color:var(--color-success)]">
                         {evaluation.recommendation_label
-                          ? RECOMMENDATION_LABELS[evaluation.recommendation_label] ?? evaluation.recommendation_label
+                          ? (RECOMMENDATION_LABELS[evaluation.recommendation_label] ??
+                            evaluation.recommendation_label)
                           : "Pending"}
                       </span>
                     </div>
@@ -294,7 +310,10 @@ export function AIReviewClient() {
                         className="text-xs h-7"
                         disabled={overrideMutation.isPending || evaluation.status !== "completed"}
                         onClick={() =>
-                          overrideMutation.mutate({ evaluationId: evaluation.id, recommendationLabel: label })
+                          overrideMutation.mutate({
+                            evaluationId: evaluation.id,
+                            recommendationLabel: label,
+                          })
                         }
                       >
                         Mark as {label.replace(/_/g, " ")}
@@ -311,7 +330,13 @@ export function AIReviewClient() {
                 {donut.length > 0 ? (
                   <ResponsiveContainer width="100%" height={200}>
                     <PieChart>
-                      <Pie data={donut} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80}>
+                      <Pie
+                        data={donut}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={50}
+                        outerRadius={80}
+                      >
                         {donut.map((_, i) => (
                           <Cell key={i} fill={colors[i]} />
                         ))}
@@ -365,15 +390,21 @@ export function AIReviewClient() {
                         </div>
                         <div>
                           <span className="text-muted-foreground text-xs">Experience</span>
-                          <div className="font-medium">{comparison.job_requirements.experience ?? "—"}</div>
+                          <div className="font-medium">
+                            {comparison.job_requirements.experience ?? "—"}
+                          </div>
                         </div>
                         <div>
                           <span className="text-muted-foreground text-xs">Education</span>
-                          <div className="font-medium">{comparison.job_requirements.education ?? "—"}</div>
+                          <div className="font-medium">
+                            {comparison.job_requirements.education ?? "—"}
+                          </div>
                         </div>
                         <div>
                           <span className="text-muted-foreground text-xs">Location</span>
-                          <div className="font-medium">{comparison.job_requirements.location ?? "—"}</div>
+                          <div className="font-medium">
+                            {comparison.job_requirements.location ?? "—"}
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -402,7 +433,9 @@ export function AIReviewClient() {
                         </div>
                         <div>
                           <span className="text-muted-foreground text-xs">Location</span>
-                          <div className="font-medium">{comparison.candidate_profile.location ?? "—"}</div>
+                          <div className="font-medium">
+                            {comparison.candidate_profile.location ?? "—"}
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -415,8 +448,8 @@ export function AIReviewClient() {
                       </CardTitle>
                       {gradedCriteria && (
                         <p className="text-xs text-muted-foreground">
-                          Each requirement is scored with partial credit for related experience, with the
-                          evidence the AI found.
+                          Each requirement is scored with partial credit for related experience,
+                          with the evidence the AI found.
                         </p>
                       )}
                     </CardHeader>
@@ -427,7 +460,9 @@ export function AIReviewClient() {
                             <th className="p-3 text-left">Type</th>
                             <th className="p-3 text-left">Requirement</th>
                             <th className="p-3 text-right">Weight</th>
-                            <th className="p-3 text-left">{gradedCriteria ? "Evidence" : "Candidate"}</th>
+                            <th className="p-3 text-left">
+                              {gradedCriteria ? "Evidence" : "Candidate"}
+                            </th>
                             <th className="p-3 text-left">Status</th>
                             <th className="p-3 text-right">Score</th>
                           </tr>
@@ -442,7 +477,9 @@ export function AIReviewClient() {
                               </td>
                               <td className="p-3">{c.requirement}</td>
                               <td className="p-3 text-right text-xs">{c.weight}</td>
-                              <td className="p-3 text-xs text-muted-foreground">{c.candidate_value}</td>
+                              <td className="p-3 text-xs text-muted-foreground">
+                                {c.candidate_value}
+                              </td>
                               <td className="p-3">
                                 <span
                                   className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusChip(c.status)}`}
@@ -466,7 +503,9 @@ export function AIReviewClient() {
                 </>
               ) : (
                 <Card>
-                  <CardContent className="p-8 text-center text-sm text-muted-foreground">Loading…</CardContent>
+                  <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                    Loading…
+                  </CardContent>
                 </Card>
               )}
             </TabsContent>

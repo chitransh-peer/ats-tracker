@@ -24,24 +24,18 @@ def _scope_filter(query, viewer: CurrentUser | None):
     if RoleName.HIRING_MANAGER.value in scopes:
         conditions.append(
             Interview.application_id.in_(
-                select(Application.id)
-                .join(Job, Job.id == Application.job_id)
-                .where(Job.hiring_manager_id == viewer.id)
+                select(Application.id).join(Job, Job.id == Application.job_id).where(Job.hiring_manager_id == viewer.id)
             )
         )
     if RoleName.INTERVIEWER.value in scopes:
         conditions.append(
-            Interview.id.in_(
-                select(InterviewPanelMember.interview_id).where(InterviewPanelMember.user_id == viewer.id)
-            )
+            Interview.id.in_(select(InterviewPanelMember.interview_id).where(InterviewPanelMember.user_id == viewer.id))
         )
     return query.where(or_(*conditions))
 
 
 def _load(query):
-    return query.options(
-        selectinload(Interview.panel_members), selectinload(Interview.feedback_entries)
-    )
+    return query.options(selectinload(Interview.panel_members), selectinload(Interview.feedback_entries))
 
 
 def create_interview(
@@ -74,9 +68,7 @@ def create_interview(
 
     for user_id in dict.fromkeys(panel_user_ids):
         db.add(
-            InterviewPanelMember(
-                interview_id=interview.id, user_id=user_id, is_primary=(user_id == primary_interviewer_id)
-            )
+            InterviewPanelMember(interview_id=interview.id, user_id=user_id, is_primary=(user_id == primary_interviewer_id))
         )
     db.commit()
     db.refresh(interview)
@@ -86,9 +78,7 @@ def create_interview(
 def get_interview(
     db: Session, organization_id: uuid.UUID, interview_id: uuid.UUID, *, viewer: CurrentUser | None = None
 ) -> Interview:
-    query = _load(select(Interview)).where(
-        Interview.id == interview_id, Interview.organization_id == organization_id
-    )
+    query = _load(select(Interview)).where(Interview.id == interview_id, Interview.organization_id == organization_id)
     interview = db.scalar(_scope_filter(query, viewer))
     if interview is None:
         raise NotFoundError("Interview not found")

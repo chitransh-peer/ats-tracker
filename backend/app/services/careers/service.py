@@ -54,18 +54,16 @@ def apply_to_job(
     resume_content_type: str | None,
 ):
     job = db.scalar(
-        select(Job).where(
-            Job.id == job_id, Job.organization_id == organization_id, Job.status == JobStatus.ACTIVE.value
-        )
+        select(Job).where(Job.id == job_id, Job.organization_id == organization_id, Job.status == JobStatus.ACTIVE.value)
     )
     if job is None:
         raise NotFoundError("Job not found")
 
-    candidate = db.scalar(
-        select(Candidate).where(Candidate.organization_id == organization_id, Candidate.email == email)
-    )
+    candidate = db.scalar(select(Candidate).where(Candidate.organization_id == organization_id, Candidate.email == email))
     if candidate is None:
-        candidate = Candidate(organization_id=organization_id, full_name=full_name, email=email, phone=phone, source="Careers Page")
+        candidate = Candidate(
+            organization_id=organization_id, full_name=full_name, email=email, phone=phone, source="Careers Page"
+        )
         db.add(candidate)
         db.flush()
 
@@ -89,13 +87,9 @@ def apply_to_job(
     # Imported here to avoid a service<->worker import cycle at module load.
     from app.workers.tasks.ai import evaluate_application_task, parse_resume_task
 
-    evaluation = create_pending_evaluation(
-        db, organization_id=organization_id, application_id=application.id, actor_id=None
-    )
+    evaluation = create_pending_evaluation(db, organization_id=organization_id, application_id=application.id, actor_id=None)
     if document is not None:
-        run = create_pending_run(
-            db, organization_id=organization_id, candidate_id=candidate.id, document_id=document.id
-        )
+        run = create_pending_run(db, organization_id=organization_id, candidate_id=candidate.id, document_id=document.id)
         # Parse first, then chain evaluation once the résumé text is available.
         parse_resume_task.send(str(run.id), str(evaluation.id))
     else:

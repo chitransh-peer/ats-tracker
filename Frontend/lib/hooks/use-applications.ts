@@ -8,6 +8,15 @@ export function useApplications(filters: applicationsApi.ApplicationFilters = {}
   });
 }
 
+/** Paginated variant for the Applications grid — returns `{ data, total }`. */
+export function useApplicationsPage(filters: applicationsApi.ApplicationFilters = {}) {
+  return useQuery({
+    queryKey: ["applications", "page", filters],
+    queryFn: () => applicationsApi.listApplicationsPage(filters),
+    placeholderData: (previous) => previous,
+  });
+}
+
 export function useApplicationTimeline(applicationId: string | undefined) {
   return useQuery({
     queryKey: ["applications", applicationId, "timeline"],
@@ -60,4 +69,30 @@ export function useApplicationAction() {
       onSuccess: invalidate,
     }),
   };
+}
+
+export function useApplication(applicationId: string | undefined) {
+  return useQuery({
+    queryKey: ["applications", applicationId, "detail"],
+    queryFn: () => applicationsApi.getApplication(applicationId as string),
+    enabled: !!applicationId,
+  });
+}
+
+export function useBulkRejectApplications() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ applicationIds, note }: { applicationIds: string[]; note?: string }) =>
+      applicationsApi.bulkRejectApplications(applicationIds, note),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["applications"] }),
+  });
+}
+
+export function useBulkHoldApplications() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ applicationIds, note }: { applicationIds: string[]; note?: string }) =>
+      applicationsApi.bulkHoldApplications(applicationIds, note),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["applications"] }),
+  });
 }

@@ -22,3 +22,11 @@ class OrganizationRead(BaseModel):
     settings: OrganizationSettingsRead
 
     model_config = {"from_attributes": True}
+
+
+class EmailStatusRead(BaseModel):
+    enabled: bool
+    smtp_host: str | None
+    from_email: str
+    from_name: str
+    app_base_url: str

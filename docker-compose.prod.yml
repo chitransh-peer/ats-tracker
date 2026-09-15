@@ -1,0 +1,95 @@
+# Production stack. Differences from docker-compose.yml (development):
+#   - no source bind-mounts, so containers run the built image
+#   - no --reload
+#   - restart policies on every service
+#   - Redis is not published to the host
+#   - no Postgres or MinIO: RDS and S3 replace them
+#   - no Mailpit: real SMTP (SES) replaces it
+#   - the worker's process count is pinned (see below)
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml build \
+#     --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.ats.example.com/api/v1
+#   docker compose -f docker-compose.prod.yml up -d
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Deliberately not published to the host: only sibling containers need it.
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      # Persist the downloaded embeddings model (~400 MB) across container recreates.
+      - model_cache:/app/.model_cache
+    expose:
+      - "8000"
+
+  worker:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - model_cache:/app/.model_cache
+    # Pinned on purpose. dramatiq defaults to one process per CPU, and every
+    # process that scores an application loads its own ~400 MB embeddings model,
+    # so the default multiplies memory by core count. Two processes is ample for
+    # pilot volume; raise it only alongside instance memory.
+    command: dramatiq app.workers.tasks --processes 2 --threads 4
+
+  frontend:
+    build:
+      context: ./Frontend
+      args:
+        # Override at build time. Baked into the client bundle — a rebuild is
+        # required to change it, not a restart.
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?set NEXT_PUBLIC_API_BASE_URL}
+        NEXT_PUBLIC_CAREERS_ORG_SLUG: ${NEXT_PUBLIC_CAREERS_ORG_SLUG:-peer-consulting}
+    restart: unless-stopped
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      # Consumed by the Caddyfile.
+      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN e.g. ats.example.com}
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN e.g. api.ats.example.com}
+    depends_on:
+      - api
+      - frontend
+
+volumes:
+  redis_data:
+  model_cache:
+  caddy_data:
+  caddy_config:

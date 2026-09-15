@@ -1,0 +1,30 @@
+[tool.ruff]
+# Matches the existing code, which runs a little past the usual 100.
+line-length = 125
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # import sorting
+    "UP",  # pyupgrade
+    "B",   # bugbear
+    "C4",  # comprehensions
+]
+ignore = [
+    "B008",  # FastAPI's Depends() in defaults is the framework's idiom
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Re-exports and import-for-side-effect registration.
+"**/__init__.py" = ["F401"]
+# SQLAlchemy relationships use string forward references (Mapped["Job"]) that the
+# mapper registry resolves at runtime, so the names are legitimately not imported.
+"app/db/models/*.py" = ["F821"]
+# Alembic's generated migration preamble isn't import-ordered.
+"alembic/**" = ["E402", "F401"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"

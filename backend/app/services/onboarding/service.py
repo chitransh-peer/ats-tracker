@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import false, select
 from sqlalchemy.orm import Session, selectinload
@@ -65,9 +65,7 @@ def open_case_for_application(
     Idempotent: if a case already exists for the application it is returned
     unchanged, so the offer-acceptance hook can call this safely more than once.
     """
-    existing = db.scalar(
-        _load(select(OnboardingCase)).where(OnboardingCase.application_id == application_id)
-    )
+    existing = db.scalar(_load(select(OnboardingCase)).where(OnboardingCase.application_id == application_id))
     if existing is not None:
         return existing
 
@@ -152,7 +150,9 @@ def update_case(db: Session, case: OnboardingCase, *, actor_id: uuid.UUID | None
     return case
 
 
-def add_task(db: Session, case: OnboardingCase, *, title: str, category: str, assignee_id=None, due_date=None) -> OnboardingTask:
+def add_task(
+    db: Session, case: OnboardingCase, *, title: str, category: str, assignee_id=None, due_date=None
+) -> OnboardingTask:
     if case.status != OnboardingStatus.IN_PROGRESS.value:
         raise ValidationAppError("Cannot add tasks to a closed onboarding case")
     next_index = max((t.order_index for t in case.tasks), default=-1) + 1
@@ -188,7 +188,7 @@ def update_task(db: Session, task: OnboardingTask, **fields) -> OnboardingTask:
         if value is not None:
             setattr(task, key, value)
     if status == OnboardingTaskStatus.COMPLETED.value:
-        task.completed_at = datetime.now(timezone.utc)
+        task.completed_at = datetime.now(UTC)
     elif status is not None:
         task.completed_at = None
     db.flush()
@@ -204,7 +204,7 @@ def complete_case(db: Session, case: OnboardingCase) -> OnboardingCase:
         raise ValidationAppError(f"{len(incomplete)} task(s) still incomplete")
 
     case.status = OnboardingStatus.COMPLETED.value
-    case.completed_at = datetime.now(timezone.utc)
+    case.completed_at = datetime.now(UTC)
 
     application = db.get(Application, case.application_id)
     if application is not None:

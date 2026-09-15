@@ -2,12 +2,15 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db_session
+from app.core.config import get_settings
 from app.core.enums import AuditAction, RoleName
 from app.core.exceptions import ForbiddenError, ValidationAppError
+from app.core.rate_limit import limiter
 from app.core.security import create_view_as_token
 from app.schemas.auth import (
     CurrentUser,
     ForgotPasswordRequest,
+    ForgotPasswordResponse,
     InviteAcceptRequest,
     LoginRequest,
     LogoutRequest,
@@ -20,13 +23,16 @@ from app.schemas.auth import (
 from app.schemas.user import UserRead
 from app.services.audit.service import record as record_audit
 from app.services.auth import service as auth_service
+from app.services.mail import messages as mail_messages
 from app.services.users.service import get_user_by_id, role_names_for_user
+from app.workers.tasks.mail import send_email_task
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=TokenPair)
-def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db_session)) -> TokenPair:
+@limiter.limit("10/minute")
+def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db_session)) -> TokenPair:
     access_token, refresh_token = auth_service.login(
         db, email=payload.email, password=payload.password, ip_address=request.client.host if request.client else None
     )
@@ -44,9 +50,30 @@ def logout(payload: LogoutRequest, db: Session = Depends(get_db_session)) -> Non
     auth_service.logout(db, refresh_token=payload.refresh_token)
 
 
-@router.post("/forgot-password", status_code=204)
-def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db_session)) -> None:
-    auth_service.request_password_reset(db, email=payload.email)
+@router.post("/forgot-password", response_model=ForgotPasswordResponse)
+@limiter.limit("5/minute")
+def forgot_password(
+    request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db_session)
+) -> ForgotPasswordResponse:
+    expires_in_minutes = 30
+    raw_token = auth_service.request_password_reset(db, email=payload.email, expires_in_minutes=expires_in_minutes)
+
+    settings = get_settings()
+
+    # raw_token is None when no active account matched. Queue mail only when it
+    # did, but keep the response identical either way so the endpoint can't be
+    # used to probe which addresses have accounts.
+    if raw_token is not None:
+        subject, text_body, html_body = mail_messages.password_reset(token=raw_token, expires_in_minutes=expires_in_minutes)
+        send_email_task.send(payload.email, subject, text_body, html_body)
+
+    # Never hand the token back in production, whatever the flag says.
+    expose = settings.expose_password_reset_token and settings.app_env != "production"
+
+    return ForgotPasswordResponse(
+        detail="If an account exists for that email, a password reset link has been issued.",
+        reset_token=raw_token if expose else None,
+    )
 
 
 @router.post("/reset-password", status_code=204)
@@ -56,16 +83,23 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db_s
 
 @router.post("/invite/accept", response_model=UserRead, status_code=201)
 def accept_invite(payload: InviteAcceptRequest, db: Session = Depends(get_db_session)) -> UserRead:
-    user = auth_service.accept_invitation(
-        db, token=payload.token, full_name=payload.full_name, password=payload.password
+    user = auth_service.accept_invitation(db, token=payload.token, full_name=payload.full_name, password=payload.password)
+
+    roles = role_names_for_user(user)
+    # Confirmation that the account is live. Carries no credential, and gives the
+    # person a way to react if it wasn't them who activated it.
+    subject, text_body, html_body = mail_messages.account_created(
+        full_name=user.full_name, email=user.email, role_names=roles
     )
+    send_email_task.send(user.email, subject, text_body, html_body)
+
     return UserRead(
         id=user.id,
         organization_id=user.organization_id,
         email=user.email,
         full_name=user.full_name,
         is_active=user.is_active,
-        roles=role_names_for_user(user),
+        roles=roles,
         created_at=user.created_at,
         updated_at=user.updated_at,
     )
@@ -82,7 +116,7 @@ def view_as(
     try:
         role = RoleName(payload.role_name)
     except ValueError:
-        raise ValidationAppError(f"Unknown role: {payload.role_name}")
+        raise ValidationAppError(f"Unknown role: {payload.role_name}") from None
 
     token = create_view_as_token(str(current_user.id), str(current_user.organization_id), role.value)
     record_audit(

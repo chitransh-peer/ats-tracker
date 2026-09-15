@@ -9,6 +9,19 @@ export function logout(refreshToken: string) {
   return apiClient.post<void>("/auth/logout", { refresh_token: refreshToken });
 }
 
+export function forgotPassword(email: string) {
+  return apiClient.post<{ detail: string; reset_token: string | null }>("/auth/forgot-password", {
+    email,
+  });
+}
+
+export function resetPassword(token: string, newPassword: string) {
+  return apiClient.post<void>("/auth/reset-password", {
+    token,
+    new_password: newPassword,
+  });
+}
+
 export function me() {
   return apiClient.get<CurrentUserProfile>("/auth/me");
 }

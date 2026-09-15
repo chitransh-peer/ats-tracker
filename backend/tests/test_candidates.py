@@ -37,9 +37,7 @@ def test_duplicate_email_is_flagged(client, make_user, auth_headers):
     headers = auth_headers(user.email, password)
 
     client.post("/api/v1/candidates", json=_candidate_payload(), headers=headers)
-    second = client.post(
-        "/api/v1/candidates", json=_candidate_payload(full_name="Different Name"), headers=headers
-    )
+    second = client.post("/api/v1/candidates", json=_candidate_payload(full_name="Different Name"), headers=headers)
 
     assert second.status_code == 201
     assert len(second.json()["duplicate_warnings"]) == 1

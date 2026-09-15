@@ -85,9 +85,7 @@ class Client(TimestampMixin, AuditedByMixin, Base):
     accounts: Mapped[list["ClientAccount"]] = relationship(back_populates="client", cascade="all, delete-orphan")
     notes: Mapped[list["ClientNote"]] = relationship(back_populates="client", cascade="all, delete-orphan")
     documents: Mapped[list["ClientDocument"]] = relationship(back_populates="client", cascade="all, delete-orphan")
-    assignments: Mapped[list["ClientAssignment"]] = relationship(
-        back_populates="client", cascade="all, delete-orphan"
-    )
+    assignments: Mapped[list["ClientAssignment"]] = relationship(back_populates="client", cascade="all, delete-orphan")
     child_clients: Mapped[list["Client"]] = relationship(
         back_populates="parent_client", remote_side=None, foreign_keys=[parent_client_id]
     )

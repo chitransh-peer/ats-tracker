@@ -98,7 +98,9 @@ function CaseCard({
               {onboardingCase.status}
             </Badge>
             {onboardingCase.start_date && (
-              <span className="text-xs text-muted-foreground">Starts {onboardingCase.start_date}</span>
+              <span className="text-xs text-muted-foreground">
+                Starts {onboardingCase.start_date}
+              </span>
             )}
           </div>
         </div>
@@ -130,7 +132,9 @@ function CaseCard({
                   disabled={!editable}
                   onCheckedChange={(v) => toggleTask(task.id, Boolean(v))}
                 />
-                <span className={`flex-1 text-sm ${completed ? "line-through text-muted-foreground" : ""}`}>
+                <span
+                  className={`flex-1 text-sm ${completed ? "line-through text-muted-foreground" : ""}`}
+                >
                   {task.title}
                 </span>
                 {task.due_date && (
@@ -164,7 +168,13 @@ function CaseCard({
                 ))}
               </SelectContent>
             </Select>
-            <Button type="submit" size="sm" variant="secondary" className="h-8" disabled={!newTaskTitle.trim()}>
+            <Button
+              type="submit"
+              size="sm"
+              variant="secondary"
+              className="h-8"
+              disabled={!newTaskTitle.trim()}
+            >
               Add
             </Button>
           </form>
@@ -210,7 +220,10 @@ export function OnboardingClient() {
   const cancelled = cases?.filter((c) => c.status === "Cancelled").length ?? 0;
 
   return (
-    <AppShell title="Onboarding" breadcrumbs={[{ label: "Home", to: "/" }, { label: "Onboarding" }]}>
+    <AppShell
+      title="Onboarding"
+      breadcrumbs={[{ label: "Home", to: "/" }, { label: "Onboarding" }]}
+    >
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
         <StatCard label="In progress" value={inProgress} />
         <StatCard label="Completed" value={completed} tone="success" />

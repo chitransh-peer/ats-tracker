@@ -38,8 +38,12 @@ export function AcceptInviteClient() {
             P
           </div>
           <div>
-            <div className="text-sm font-semibold leading-tight">Peer Consulting Resources Inc.</div>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Recruiting OS</div>
+            <div className="text-sm font-semibold leading-tight">
+              Peer Consulting Resources Inc.
+            </div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Recruiting OS
+            </div>
           </div>
         </Link>
 
@@ -102,19 +106,19 @@ export function AcceptInviteClient() {
                     id="password"
                     type="password"
                     required
-                    minLength={8}
+                    minLength={12}
                     autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-9"
                   />
                 </div>
-                <p className="mt-1 text-[11px] text-muted-foreground">At least 8 characters.</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">At least 12 characters.</p>
               </div>
               <Button
                 type="submit"
                 className="w-full"
-                disabled={mutation.isPending || !token || !fullName || password.length < 8}
+                disabled={mutation.isPending || !token || !fullName || password.length < 12}
               >
                 {mutation.isPending ? (
                   <>

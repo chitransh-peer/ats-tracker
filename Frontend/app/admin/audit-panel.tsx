@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useAuditLogs, useAuditSummaryByUser } from "@/lib/hooks/use-audit";
+import { useAuditLogsPage, useAuditSummaryByUser } from "@/lib/hooks/use-audit";
+import { Pager } from "@/components/ui/pager";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Activity } from "lucide-react";
@@ -11,13 +12,25 @@ function formatLabel(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+const PAGE_SIZE = 50;
+
 export function AuditPanel() {
   const { data: summary, isLoading: summaryLoading } = useAuditSummaryByUser();
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [offset, setOffset] = useState(0);
 
-  const { data: logs, isLoading: logsLoading } = useAuditLogs(
-    selectedUserId ? { actor_user_id: selectedUserId } : {},
-  );
+  const { data, isLoading: logsLoading } = useAuditLogsPage({
+    ...(selectedUserId ? { actor_user_id: selectedUserId } : {}),
+    limit: PAGE_SIZE,
+    offset,
+  });
+  const logs = data?.data;
+  const total = data?.total ?? 0;
+
+  function selectUser(userId: string | null) {
+    setSelectedUserId(userId);
+    setOffset(0);
+  }
 
   const selected = (summary ?? []).find((s) => s.actor_user_id === selectedUserId);
 
@@ -36,7 +49,7 @@ export function AuditPanel() {
             <ul className="divide-y divide-border">
               <li>
                 <button
-                  onClick={() => setSelectedUserId(null)}
+                  onClick={() => selectUser(null)}
                   className={cn(
                     "w-full text-left p-3 hover:bg-muted/40",
                     selectedUserId === null && "bg-muted/60",
@@ -49,7 +62,7 @@ export function AuditPanel() {
               {(summary ?? []).map((row) => (
                 <li key={row.actor_user_id ?? "system"}>
                   <button
-                    onClick={() => setSelectedUserId(row.actor_user_id)}
+                    onClick={() => selectUser(row.actor_user_id)}
                     className={cn(
                       "w-full text-left p-3 hover:bg-muted/40",
                       selectedUserId === row.actor_user_id && "bg-muted/60",
@@ -109,6 +122,9 @@ export function AuditPanel() {
             </ul>
           )}
         </CardContent>
+        {!logsLoading && (logs ?? []).length > 0 && (
+          <Pager offset={offset} limit={PAGE_SIZE} total={total} onOffsetChange={setOffset} />
+        )}
       </Card>
     </div>
   );

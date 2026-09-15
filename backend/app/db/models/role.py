@@ -15,9 +15,7 @@ class Role(TimestampMixin, Base):
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     is_system_role: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    role_permissions: Mapped[list["RolePermission"]] = relationship(
-        back_populates="role", cascade="all, delete-orphan"
-    )
+    role_permissions: Mapped[list["RolePermission"]] = relationship(back_populates="role", cascade="all, delete-orphan")
     user_roles: Mapped[list["UserRole"]] = relationship(back_populates="role", cascade="all, delete-orphan")
 
 

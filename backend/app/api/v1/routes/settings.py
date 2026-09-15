@@ -1,14 +1,39 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db_session, require_permission
+from app.api.deps import get_current_user, get_db_session, require_permission
+from app.core.config import get_settings
 from app.core.enums import AuditAction, PermissionAction, PermissionResource
 from app.schemas.auth import CurrentUser
-from app.schemas.organization import OrganizationRead, OrganizationSettingsUpdate
+from app.schemas.organization import (
+    EmailStatusRead,
+    OrganizationRead,
+    OrganizationSettingsUpdate,
+)
 from app.services.audit.service import record as record_audit
 from app.services.organizations import service as organization_service
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+
+
+@router.get("/email-status", response_model=EmailStatusRead)
+def get_email_status(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> EmailStatusRead:
+    """Whether outbound email can actually leave the building. Excludes credentials.
+
+    Open to any authenticated user rather than gated on settings:read — a recruiter
+    composing candidate outreach needs to know whether it will actually be sent,
+    and the payload holds no secrets.
+    """
+    settings = get_settings()
+    return EmailStatusRead(
+        enabled=settings.mail_enabled,
+        smtp_host=settings.smtp_host or None,
+        from_email=settings.mail_from_email,
+        from_name=settings.mail_from_name,
+        app_base_url=settings.app_base_url,
+    )
 
 
 @router.get("/organization", response_model=OrganizationRead)

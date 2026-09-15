@@ -80,9 +80,7 @@ def test_reject_returns_offer_to_draft(client, make_user, make_job, make_candida
     offer = _create_offer(client, recruiter_headers, application.id)
     client.post(f"/api/v1/offers/{offer['id']}/submit-approval", json={}, headers=recruiter_headers)
 
-    response = client.post(
-        f"/api/v1/offers/{offer['id']}/reject", json={"note": "Salary too high"}, headers=admin_headers
-    )
+    response = client.post(f"/api/v1/offers/{offer['id']}/reject", json={"note": "Salary too high"}, headers=admin_headers)
 
     assert response.status_code == 200
     assert response.json()["status"] == "Draft"

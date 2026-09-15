@@ -4,7 +4,18 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { AppShell, StageBadge, ScorePill } from "@/components/layout/AppShell";
-import { useCandidate, useCandidateNotes, useAddCandidateNote } from "@/lib/hooks/use-candidates";
+import {
+  useCandidate,
+  useCandidateNotes,
+  useAddCandidateNote,
+  useCandidateMessages,
+  useSendCandidateMessage,
+} from "@/lib/hooks/use-candidates";
+import { useTemplates } from "@/lib/hooks/use-templates";
+import { useEmailStatus } from "@/lib/hooks/use-settings";
+import { useAuth } from "@/lib/auth/auth-context";
+import { ApiError } from "@/lib/api/client";
+import type { Application, Job } from "@/lib/api/types";
 import { useApplications } from "@/lib/hooks/use-applications";
 import { useInterviews } from "@/lib/hooks/use-interviews";
 import { useJobs } from "@/lib/hooks/use-jobs";
@@ -15,8 +26,210 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Mail, Phone, MapPin, Linkedin, Clock, Sparkles } from "lucide-react";
 import { initialsOf, relativeTime } from "@/lib/utils";
+
+/** Fill the merge tokens we can resolve from the current context. Anything we
+ *  can't resolve is left visible so the recruiter notices before sending. */
+function applyTokens(
+  text: string,
+  ctx: { candidateName: string; jobTitle: string | null; recruiterName: string },
+): string {
+  return text
+    .replace(/\{\{candidate_first_name\}\}/g, ctx.candidateName.split(" ")[0] ?? "")
+    .replace(/\{\{candidate_full_name\}\}/g, ctx.candidateName)
+    .replace(/\{\{recruiter_name\}\}/g, ctx.recruiterName)
+    .replace(/\{\{job_title\}\}/g, ctx.jobTitle ?? "{{job_title}}");
+}
+
+function MessagesTab({
+  candidateId,
+  candidateName,
+  candidateEmail,
+  applications,
+  jobById,
+}: {
+  candidateId: string;
+  candidateName: string;
+  candidateEmail: string;
+  applications: Application[];
+  jobById: Map<string, Job>;
+}) {
+  const { user } = useAuth();
+  const { data: emailStatus } = useEmailStatus();
+  const { data: messages, isLoading } = useCandidateMessages(candidateId);
+  const { data: templates } = useTemplates();
+  const sendMessage = useSendCandidateMessage(candidateId);
+
+  const [applicationId, setApplicationId] = useState<string>("none");
+  const [templateId, setTemplateId] = useState<string>("none");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const linkedJobTitle =
+    applicationId === "none"
+      ? null
+      : (jobById.get(applications.find((a) => a.id === applicationId)?.job_id ?? "")?.title ??
+        null);
+
+  function handleTemplateChange(nextId: string) {
+    setTemplateId(nextId);
+    const template = (templates ?? []).find((t) => t.id === nextId);
+    if (!template) return;
+    const ctx = {
+      candidateName,
+      jobTitle: linkedJobTitle,
+      recruiterName: user?.full_name ?? "",
+    };
+    setSubject(applyTokens(template.subject, ctx));
+    setBody(applyTokens(template.body, ctx));
+  }
+
+  async function handleSend(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    try {
+      await sendMessage.mutateAsync({
+        subject,
+        body,
+        application_id: applicationId === "none" ? null : applicationId,
+        template_id: templateId === "none" ? null : templateId,
+      });
+      setSubject("");
+      setBody("");
+      setTemplateId("none");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to log the message.");
+    }
+  }
+
+  const unresolvedTokens = /\{\{[a-z_]+\}\}/.test(subject + body);
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Compose message</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            {emailStatus?.enabled
+              ? `Sends to ${candidateEmail} and is recorded against the candidate.`
+              : `Email delivery isn't configured, so this is recorded as an outreach log rather than delivered to ${candidateEmail}.`}
+          </p>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSend} className="space-y-3">
+            {error && <div className="text-sm text-destructive">{error}</div>}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Template</Label>
+                <Select value={templateId} onValueChange={handleTemplateChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Start from scratch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Start from scratch</SelectItem>
+                    {(templates ?? []).map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Link to application</Label>
+                <Select value={applicationId} onValueChange={setApplicationId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Not linked" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Not linked</SelectItem>
+                    {applications.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {jobById.get(a.job_id)?.title ?? "Role"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Subject</Label>
+              <Input value={subject} onChange={(e) => setSubject(e.target.value)} required />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Message</Label>
+              <Textarea
+                rows={8}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                required
+                className="font-mono text-sm"
+              />
+            </div>
+            {unresolvedTokens && (
+              <p className="text-xs text-[color:var(--color-warning-foreground)]">
+                This message still contains unfilled <code>{"{{tokens}}"}</code> — link an
+                application or edit them by hand before sending.
+              </p>
+            )}
+            <Button
+              type="submit"
+              size="sm"
+              disabled={sendMessage.isPending || !subject.trim() || !body.trim()}
+            >
+              {sendMessage.isPending ? "Logging…" : "Log message"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Outreach history</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {isLoading ? (
+            <div className="text-sm text-muted-foreground">Loading…</div>
+          ) : (messages ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No messages logged for this candidate yet.
+            </p>
+          ) : (
+            [...(messages ?? [])]
+              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+              .map((m) => (
+                <div key={m.id} className="rounded-md border p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="text-sm font-medium">{m.subject}</div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant="secondary" className="text-[10px] capitalize">
+                        {m.status}
+                      </Badge>
+                      <span className="text-[11px] text-muted-foreground">
+                        {relativeTime(m.created_at)}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{m.body}</p>
+                </div>
+              ))
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 export function CandidateDetailClient() {
   const params = useParams<{ candidateId: string }>();
@@ -140,6 +353,7 @@ export function CandidateDetailClient() {
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="applications">Applications</TabsTrigger>
               <TabsTrigger value="interviews">Interviews</TabsTrigger>
+              <TabsTrigger value="messages">Messages</TabsTrigger>
               <TabsTrigger value="notes">Notes</TabsTrigger>
             </TabsList>
 
@@ -304,6 +518,16 @@ export function CandidateDetailClient() {
               ))}
             </TabsContent>
 
+            <TabsContent value="messages" className="mt-4">
+              <MessagesTab
+                candidateId={candidateId}
+                candidateName={candidate.full_name}
+                candidateEmail={candidate.email}
+                applications={applications ?? []}
+                jobById={jobById}
+              />
+            </TabsContent>
+
             <TabsContent value="notes" className="mt-4 space-y-4">
               <form onSubmit={handleAddNote} className="flex gap-2">
                 <Textarea
@@ -352,8 +576,7 @@ export function CandidateDetailClient() {
               )}
               {(applications ?? []).map((app) => {
                 const job = (jobs ?? []).find((j) => j.id === app.job_id);
-                const score =
-                  typeof app.ai_score === "number" ? Math.round(app.ai_score) : null;
+                const score = typeof app.ai_score === "number" ? Math.round(app.ai_score) : null;
                 return (
                   <div key={app.id} className="rounded-md border p-3 space-y-1.5">
                     <div className="flex items-center justify-between gap-2">

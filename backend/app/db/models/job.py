@@ -111,9 +111,7 @@ class Job(TimestampMixin, AuditedByMixin, SoftDeleteMixin, Base):
     primary_recruiter_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    assigned_to_ids: Mapped[list[uuid.UUID]] = mapped_column(
-        ARRAY(UUID(as_uuid=True)), nullable=False, default=list
-    )
+    assigned_to_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=False, default=list)
     comments: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     client: Mapped["Client"] = relationship()
@@ -126,9 +124,7 @@ class Job(TimestampMixin, AuditedByMixin, SoftDeleteMixin, Base):
     updated_by_user: Mapped["User"] = relationship(foreign_keys="Job.updated_by")
     notes: Mapped[list["JobNote"]] = relationship(back_populates="job", cascade="all, delete-orphan")
     documents: Mapped[list["JobDocument"]] = relationship(back_populates="job", cascade="all, delete-orphan")
-    custom_fields: Mapped[list["JobCustomField"]] = relationship(
-        back_populates="job", cascade="all, delete-orphan"
-    )
+    custom_fields: Mapped[list["JobCustomField"]] = relationship(back_populates="job", cascade="all, delete-orphan")
     search_criteria: Mapped["JobSearchCriteria"] = relationship(
         back_populates="job", cascade="all, delete-orphan", uselist=False
     )

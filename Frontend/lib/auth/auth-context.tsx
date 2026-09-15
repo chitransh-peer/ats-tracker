@@ -1,7 +1,12 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { login as apiLogin, logout as apiLogout, me, viewAsRole as apiViewAsRole } from "@/lib/api/auth";
+import {
+  login as apiLogin,
+  logout as apiLogout,
+  me,
+  viewAsRole as apiViewAsRole,
+} from "@/lib/api/auth";
 import {
   clearTokens,
   clearViewAsToken,
@@ -92,7 +97,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, viewAsRole, startViewAs, exitViewAs }}>
+    <AuthContext.Provider
+      value={{ user, isLoading, login, logout, viewAsRole, startViewAs, exitViewAs }}
+    >
       {children}
     </AuthContext.Provider>
   );

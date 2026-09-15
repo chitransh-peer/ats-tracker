@@ -136,8 +136,16 @@ export function AdminClient() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Button size="sm" onClick={handleInvite} disabled={!inviteEmail || inviteMutation.isPending}>
-                  {inviteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Invite user"}
+                <Button
+                  size="sm"
+                  onClick={handleInvite}
+                  disabled={!inviteEmail || inviteMutation.isPending}
+                >
+                  {inviteMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Invite user"
+                  )}
                 </Button>
               </div>
               {inviteMutation.isSuccess && inviteMutation.data && (
@@ -219,7 +227,10 @@ export function AdminClient() {
                             className={u.is_active ? "text-destructive" : ""}
                             disabled={updateUserMutation.isPending}
                             onClick={() =>
-                              updateUserMutation.mutate({ userId: u.id, input: { is_active: !u.is_active } })
+                              updateUserMutation.mutate({
+                                userId: u.id,
+                                input: { is_active: !u.is_active },
+                              })
                             }
                           >
                             {u.is_active ? "Deactivate" : "Activate"}
@@ -268,7 +279,9 @@ export function AdminClient() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-xs uppercase text-muted-foreground mb-1.5">Permissions</div>
+                    <div className="text-xs uppercase text-muted-foreground mb-1.5">
+                      Permissions
+                    </div>
                     <div className="flex flex-wrap gap-1.5">
                       {r.permissions.map((p) => (
                         <span
@@ -301,8 +314,8 @@ export function AdminClient() {
         <TabsContent value="security">
           <Card>
             <CardContent className="p-8 text-center text-sm text-muted-foreground">
-              SSO, 2FA, and session-policy controls aren&apos;t built yet — there&apos;s no backend support for
-              them in this version of the app.
+              SSO, 2FA, and session-policy controls aren&apos;t built yet — there&apos;s no backend
+              support for them in this version of the app.
             </CardContent>
           </Card>
         </TabsContent>
@@ -310,8 +323,8 @@ export function AdminClient() {
         <TabsContent value="api">
           <Card>
             <CardContent className="p-8 text-center text-sm text-muted-foreground">
-              API keys and webhooks aren&apos;t built yet — there&apos;s no backend support for them in this
-              version of the app.
+              API keys and webhooks aren&apos;t built yet — there&apos;s no backend support for them
+              in this version of the app.
             </CardContent>
           </Card>
         </TabsContent>

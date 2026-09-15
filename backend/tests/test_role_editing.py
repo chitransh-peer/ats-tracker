@@ -57,9 +57,7 @@ def test_super_admin_can_revoke_permission(client, make_user, auth_headers):
     assert client.get("/api/v1/jobs", headers=r_headers).status_code == 200
 
     recruiter_role = _get_role(client, sa_headers, RoleName.RECRUITER.value)
-    without_job_read = [
-        p for p in recruiter_role["permissions"] if not (p["resource"] == "job" and p["action"] == "read")
-    ]
+    without_job_read = [p for p in recruiter_role["permissions"] if not (p["resource"] == "job" and p["action"] == "read")]
 
     resp = client.put(
         f"/api/v1/roles/{recruiter_role['id']}/permissions",

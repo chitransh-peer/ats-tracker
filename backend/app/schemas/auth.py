@@ -26,15 +26,24 @@ class ForgotPasswordRequest(BaseModel):
     email: str
 
 
+class ForgotPasswordResponse(BaseModel):
+    """`reset_token` is only ever populated in non-production when
+    `expose_password_reset_token` is enabled; otherwise it stays null so the
+    response is identical whether or not the email matched an account."""
+
+    detail: str
+    reset_token: str | None = None
+
+
 class ResetPasswordRequest(BaseModel):
     token: str
-    new_password: str = Field(min_length=8)
+    new_password: str = Field(min_length=12)
 
 
 class InviteAcceptRequest(BaseModel):
     token: str
     full_name: str
-    password: str = Field(min_length=8)
+    password: str = Field(min_length=12)
 
 
 class ViewAsRequest(BaseModel):

@@ -78,17 +78,13 @@ def test_reset_password_flow(client, make_user, db):
     token = request_password_reset(db, email=user.email)
     assert token is not None
 
-    reset = client.post(
-        "/api/v1/auth/reset-password", json={"token": token, "new_password": "brand-new-password-123"}
-    )
+    reset = client.post("/api/v1/auth/reset-password", json={"token": token, "new_password": "brand-new-password-123"})
     assert reset.status_code == 204
 
     login_old = client.post("/api/v1/auth/login", json={"email": user.email, "password": _old_password})
     assert login_old.status_code == 401
 
-    login_new = client.post(
-        "/api/v1/auth/login", json={"email": user.email, "password": "brand-new-password-123"}
-    )
+    login_new = client.post("/api/v1/auth/login", json={"email": user.email, "password": "brand-new-password-123"})
     assert login_new.status_code == 200
 
 
@@ -120,7 +116,5 @@ def test_invitation_accept_creates_active_user(client, db, organization):
     assert body["email"] == "invitee@example.com"
     assert body["roles"] == [RoleName.INTERVIEWER.value]
 
-    login = client.post(
-        "/api/v1/auth/login", json={"email": "invitee@example.com", "password": "invitee-password-123"}
-    )
+    login = client.post("/api/v1/auth/login", json={"email": "invitee@example.com", "password": "invitee-password-123"})
     assert login.status_code == 200

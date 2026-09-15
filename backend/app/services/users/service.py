@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.exceptions import ConflictError, NotFoundError, ValidationAppError
 from app.core.security import hash_password
-from app.db.models.role import Role, UserRole
+from app.db.models.role import UserRole
 from app.db.models.user import User
 from app.services.roles.service import get_role_by_name
 

@@ -32,6 +32,23 @@ def record(
     return entry
 
 
+def build_logs_query(
+    organization_id: uuid.UUID,
+    *,
+    action: str | None = None,
+    resource_type: str | None = None,
+    actor_user_id: uuid.UUID | None = None,
+):
+    query = select(AuditLog).where(AuditLog.organization_id == organization_id)
+    if action is not None:
+        query = query.where(AuditLog.action == action)
+    if resource_type is not None:
+        query = query.where(AuditLog.resource_type == resource_type)
+    if actor_user_id is not None:
+        query = query.where(AuditLog.actor_user_id == actor_user_id)
+    return query.order_by(AuditLog.created_at.desc())
+
+
 def list_logs(
     db: Session,
     organization_id: uuid.UUID,
@@ -41,15 +58,8 @@ def list_logs(
     actor_user_id: uuid.UUID | None = None,
     limit: int = 100,
 ) -> list[AuditLog]:
-    query = select(AuditLog).where(AuditLog.organization_id == organization_id)
-    if action is not None:
-        query = query.where(AuditLog.action == action)
-    if resource_type is not None:
-        query = query.where(AuditLog.resource_type == resource_type)
-    if actor_user_id is not None:
-        query = query.where(AuditLog.actor_user_id == actor_user_id)
-    query = query.order_by(AuditLog.created_at.desc()).limit(limit)
-    return list(db.scalars(query).all())
+    query = build_logs_query(organization_id, action=action, resource_type=resource_type, actor_user_id=actor_user_id)
+    return list(db.scalars(query.limit(limit)).all())
 
 
 def summarize_by_user(db: Session, organization_id: uuid.UUID) -> list[dict]:

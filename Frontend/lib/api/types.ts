@@ -284,6 +284,24 @@ export interface CandidateNote {
   created_at: string;
 }
 
+export interface OutboundMessage {
+  id: string;
+  candidate_id: string | null;
+  application_id: string | null;
+  template_id: string | null;
+  subject: string;
+  body: string;
+  status: string;
+  created_at: string;
+}
+
+export interface SendMessageInput {
+  application_id?: string | null;
+  template_id?: string | null;
+  subject: string;
+  body: string;
+}
+
 export interface Application {
   id: string;
   organization_id: string;
@@ -346,6 +364,13 @@ export interface Interview {
   feedback_entries: InterviewFeedbackEntry[];
   created_at: string;
   updated_at: string;
+}
+
+export interface ConsolidatedFeedback {
+  interview_id: string;
+  average_rating: number | null;
+  recommendation_counts: Record<string, number>;
+  feedback_entries: InterviewFeedbackEntry[];
 }
 
 export interface OfferVersion {
@@ -428,6 +453,45 @@ export interface AgingJobRow {
   age_days: number | null;
 }
 
+export interface HiringTrendPoint {
+  month: string;
+  offers: number;
+  hires: number;
+}
+
+export interface ScoreDistributionBucket {
+  bucket: string;
+  count: number;
+}
+
+export interface OfferMetrics {
+  sent: number;
+  accepted: number;
+  declined: number;
+  pending: number;
+  acceptance_rate: number | null;
+}
+
+export interface TimeToFillSummary {
+  average_days: number | null;
+  filled_jobs_count: number;
+}
+
+export interface RecruiterPerformanceRow {
+  recruiter_id: string;
+  recruiter_name: string;
+  open_jobs: number;
+  applications: number;
+  hires: number;
+}
+
+export interface ExecutiveDashboard {
+  total_open_jobs: number;
+  total_candidates: number;
+  total_hires: number;
+  funnel: FunnelStage[];
+}
+
 export interface AIEvaluation {
   id: string;
   application_id: string;
@@ -450,6 +514,14 @@ export interface AIEvaluation {
   error_message: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface AIConfig {
+  provider: string;
+  model: string;
+  embeddings_enabled: boolean;
+  embeddings_model: string | null;
+  evaluation_skill_weight: number;
 }
 
 export interface JDCriterion {
@@ -483,6 +555,14 @@ export interface JDResumeComparison {
 export interface OrganizationSettings {
   default_locale: string;
   careers_page_enabled: boolean;
+}
+
+export interface EmailStatus {
+  enabled: boolean;
+  smtp_host: string | null;
+  from_email: string;
+  from_name: string;
+  app_base_url: string;
 }
 
 export interface Organization {
@@ -885,3 +965,175 @@ export type VendorCreateInput = Partial<VendorBusinessInfo> & {
 };
 
 export type VendorUpdateInput = Partial<VendorBusinessInfo>;
+
+// ---------------------------------------------------------------- talent bench
+
+export interface BenchProfile {
+  id: string;
+  organization_id: string;
+  candidate_id: string;
+  bench_code: number;
+
+  // Flattened from the candidate so the grid needs one request.
+  full_name: string;
+  email: string;
+  phone: string | null;
+  location: string | null;
+  current_title: string | null;
+  work_auth: string | null;
+  total_experience_years: number | null;
+  skills: string[];
+
+  marketing_title: string | null;
+  status: string;
+  sub_status: string | null;
+  bench_start_date: string;
+  bench_age_days: number;
+  available_from: string | null;
+
+  desired_rate: number | null;
+  rate_currency: string;
+  rate_unit: string | null;
+  tax_term: string | null;
+
+  sales_team_member_id: string | null;
+  account_manager_id: string | null;
+  owner_ids: string[];
+
+  preferred_locations: string | null;
+  willing_to_relocate: boolean;
+  marketing_summary: string | null;
+  internal_notes: string | null;
+
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BenchProfileInput {
+  marketing_title?: string | null;
+  status?: string;
+  sub_status?: string | null;
+  bench_start_date?: string | null;
+  available_from?: string | null;
+  desired_rate?: number | null;
+  rate_currency?: string | null;
+  rate_unit?: string | null;
+  tax_term?: string | null;
+  sales_team_member_id?: string | null;
+  account_manager_id?: string | null;
+  preferred_locations?: string | null;
+  willing_to_relocate?: boolean;
+  marketing_summary?: string | null;
+  internal_notes?: string | null;
+  owner_ids?: string[];
+}
+
+export interface BenchSummary {
+  total: number;
+  active: number;
+  inactive: number;
+  placed: number;
+  average_bench_age_days: number | null;
+  aging_over_60_days: number;
+}
+
+export interface BenchSubmission {
+  id: string;
+  client_id: string | null;
+  vendor_id: string | null;
+  job_id: string | null;
+  submitted_rate: number | null;
+  status: string | null;
+  note: string | null;
+  submitted_by: string | null;
+  created_at: string;
+}
+
+// -------------------------------------------------------------------- hotlists
+
+export interface HotlistMember {
+  id: string;
+  bench_profile_id: string;
+  sort_order: number;
+  headline_override: string | null;
+  full_name: string;
+  email: string;
+  marketing_title: string | null;
+  work_auth: string | null;
+  bench_age_days: number;
+}
+
+export interface HotlistRecipient {
+  id: string;
+  kind: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+  company: string | null;
+  client_id: string | null;
+  vendor_id: string | null;
+  unsubscribed: boolean;
+  created_at: string;
+}
+
+export interface Hotlist {
+  id: string;
+  organization_id: string;
+  name: string;
+  status: string;
+  template_id: string | null;
+  subject: string | null;
+  body: string | null;
+  attach_spreadsheet: boolean;
+  include_rates: boolean;
+  include_candidate_contact: boolean;
+  notes: string | null;
+  members: HotlistMember[];
+  recipients: HotlistRecipient[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HotlistListItem {
+  id: string;
+  name: string;
+  status: string;
+  subject: string | null;
+  member_count: number;
+  recipient_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HotlistInput {
+  name?: string;
+  status?: string;
+  template_id?: string | null;
+  subject?: string | null;
+  body?: string | null;
+  attach_spreadsheet?: boolean;
+  include_rates?: boolean;
+  include_candidate_contact?: boolean;
+  notes?: string | null;
+}
+
+export interface HotlistSend {
+  id: string;
+  status: string;
+  subject: string;
+  member_count: number;
+  recipient_count: number;
+  sent_count: number;
+  failed_count: number;
+  error_message: string | null;
+  completed_at: string | null;
+  sent_by: string | null;
+  created_at: string;
+}
+
+export interface RecipientImportResult {
+  parsed: number;
+  added: number;
+  skipped: number;
+  problems: string[];
+}

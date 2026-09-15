@@ -19,8 +19,11 @@ def seed_roles_and_permissions(db: Session) -> None:
 
         granted_keys = {f"{resource.value}:{action.value}" for resource, action in grants}
         existing_role_permission_keys = {
-            rp.permission.key for rp in db.scalars(
-                select(RolePermission).where(RolePermission.role_id == role.id).options(selectinload(RolePermission.permission))
+            rp.permission.key
+            for rp in db.scalars(
+                select(RolePermission)
+                .where(RolePermission.role_id == role.id)
+                .options(selectinload(RolePermission.permission))
             ).all()
         }
 
@@ -43,9 +46,7 @@ def get_role_by_name(db: Session, name: str) -> Role | None:
 
 def list_roles(db: Session) -> list[Role]:
     return list(
-        db.scalars(
-            select(Role).options(selectinload(Role.role_permissions).selectinload(RolePermission.permission))
-        ).all()
+        db.scalars(select(Role).options(selectinload(Role.role_permissions).selectinload(RolePermission.permission))).all()
     )
 
 
@@ -60,9 +61,7 @@ def get_role(db: Session, role_id) -> Role:
     return role
 
 
-def roles_grant(
-    db: Session, role_names: list[str], resource: PermissionResource, action: PermissionAction
-) -> bool:
+def roles_grant(db: Session, role_names: list[str], resource: PermissionResource, action: PermissionAction) -> bool:
     """Authoritative runtime permission check, backed by the DB role_permissions
     table (not the static matrix), so super-admin edits take effect immediately.
 
@@ -86,9 +85,7 @@ def roles_grant(
     return count is not None
 
 
-def set_role_permissions(
-    db: Session, role: Role, grants: list[tuple[str, str]]
-) -> Role:
+def set_role_permissions(db: Session, role: Role, grants: list[tuple[str, str]]) -> Role:
     """Replace a role's permission grants with `grants` (list of (resource, action)).
 
     The super_admin role is intentionally immutable to prevent an accidental

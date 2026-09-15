@@ -63,9 +63,7 @@ def _to_read(db: Session, vendor) -> VendorRead:
         contacts=[_contact_read(c) for c in vendor.contacts],
         accounts=vendor.accounts,
         bank_accounts=vendor.bank_accounts,
-        active_submissions=vendor_service.active_submissions_count(
-            db, vendor.organization_id, vendor.name
-        ),
+        active_submissions=vendor_service.active_submissions_count(db, vendor.organization_id, vendor.name),
     )
 
 
@@ -146,9 +144,7 @@ def update_vendor(
     db: Session = Depends(get_db_session),
 ) -> VendorRead:
     vendor = vendor_service.get_vendor(db, current_user.organization_id, vendor_id)
-    vendor_service.update_vendor(
-        db, vendor, actor_id=current_user.id, **payload.model_dump(exclude_unset=True)
-    )
+    vendor_service.update_vendor(db, vendor, actor_id=current_user.id, **payload.model_dump(exclude_unset=True))
     return _to_read(db, vendor_service.get_vendor(db, current_user.organization_id, vendor_id))
 
 
@@ -194,9 +190,7 @@ def list_vendor_notes(
 ) -> list[VendorNoteRead]:
     vendor = vendor_service.get_vendor(db, current_user.organization_id, vendor_id)
     notes = vendor_service.list_notes(db, vendor)
-    names = vendor_service.resolve_user_names(
-        db, [uid for n in notes for uid in n.notified_user_ids]
-    )
+    names = vendor_service.resolve_user_names(db, [uid for n in notes for uid in n.notified_user_ids])
     return [_note_read(n, names) for n in notes]
 
 
@@ -233,9 +227,7 @@ def add_vendor_meeting(
     db: Session = Depends(get_db_session),
 ) -> VendorMeetingRead:
     vendor = vendor_service.get_vendor(db, current_user.organization_id, vendor_id)
-    meeting = vendor_service.add_meeting(
-        db, vendor, created_by_id=current_user.id, **payload.model_dump()
-    )
+    meeting = vendor_service.add_meeting(db, vendor, created_by_id=current_user.id, **payload.model_dump())
     names = vendor_service.resolve_user_names(db, meeting.attendee_ids)
     return _meeting_read(meeting, names)
 

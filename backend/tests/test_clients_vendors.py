@@ -5,9 +5,7 @@ def test_admin_can_create_and_list_clients(client, make_user, auth_headers):
     user, password = make_user(role_names=[RoleName.ADMIN.value])
     headers = auth_headers(user.email, password)
 
-    created = client.post(
-        "/api/v1/clients", json={"name": "Acme Financial", "industry": "Finance"}, headers=headers
-    )
+    created = client.post("/api/v1/clients", json={"name": "Acme Financial", "industry": "Finance"}, headers=headers)
     assert created.status_code == 201
     assert created.json()["active_jobs"] == 0
 
@@ -130,10 +128,7 @@ def test_client_codes_are_unique_per_organization(client, make_user, auth_header
     headers = auth_headers(user.email, password)
 
     codes = {
-        client.post("/api/v1/clients", json={"name": f"Client {i}"}, headers=headers).json()[
-            "client_code"
-        ]
-        for i in range(3)
+        client.post("/api/v1/clients", json={"name": f"Client {i}"}, headers=headers).json()["client_code"] for i in range(3)
     }
 
     assert len(codes) == 3
@@ -177,9 +172,7 @@ def test_create_vendor_with_sections_and_snapshot(client, make_user, auth_header
                     "owner_id": str(user.id),
                 }
             ],
-            "notes": [
-                {"body": "Signed MSA", "action": "Contract", "notified_user_ids": [str(user.id)]}
-            ],
+            "notes": [{"body": "Signed MSA", "action": "Contract", "notified_user_ids": [str(user.id)]}],
             "bank_accounts": [
                 {
                     "account_holder_name": "LinkPro Technologies Inc.",

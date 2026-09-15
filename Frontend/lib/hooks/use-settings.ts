@@ -15,3 +15,7 @@ export function useUpdateOrganizationSettings() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["settings", "organization"] }),
   });
 }
+
+export function useEmailStatus() {
+  return useQuery({ queryKey: ["settings", "email-status"], queryFn: settingsApi.getEmailStatus });
+}

@@ -1,0 +1,34 @@
+# Caddy obtains and renews Let's Encrypt certificates automatically. Both
+# hostnames must already resolve to this host before the first start, or the
+# ACME challenge fails.
+#
+# APP_DOMAIN / API_DOMAIN are injected by docker-compose.prod.yml.
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy frontend:3000
+
+	header {
+		# The app is same-origin only; nothing embeds it.
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+}
+
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	# Interactive docs are disabled in the app when APP_ENV=production; this is a
+	# second line of defence in case that setting is ever relaxed by accident.
+	@docs path /docs* /redoc* /openapi.json
+	respond @docs 404
+
+	reverse_proxy api:8000
+
+	header {
+		X-Content-Type-Options "nosniff"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+}

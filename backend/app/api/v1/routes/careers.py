@@ -1,11 +1,13 @@
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session
 from app.core.exceptions import NotFoundError
+from app.core.file_validation import validate_resume_upload
+from app.core.rate_limit import limiter
 from app.db.models.organization import Organization
 from app.schemas.careers import PublicApplyResponse, PublicJobRead, PublicOrganizationRead
 from app.services.careers import service as careers_service
@@ -39,7 +41,9 @@ def get_job(org_slug: str, slug: str, db: Session = Depends(get_db_session)) -> 
 
 
 @router.post("/{org_slug}/jobs/{job_id}/apply", response_model=PublicApplyResponse, status_code=201)
+@limiter.limit("5/minute")
 async def apply_to_job(
+    request: Request,
     org_slug: str,
     job_id: uuid.UUID,
     full_name: str = Form(...),
@@ -51,6 +55,12 @@ async def apply_to_job(
     org = _get_public_organization(db, org_slug)
 
     resume_bytes = await resume.read() if resume else None
+    if resume_bytes is not None:
+        # This is the one upload path on the whole API with no logged-in user
+        # behind it, so it gets the strictest check: format-restricted, with
+        # a magic-byte check against the declared extension.
+        validate_resume_upload(data=resume_bytes, file_name=resume.filename or "resume")
+
     application, candidate = careers_service.apply_to_job(
         db,
         organization_id=org.id,

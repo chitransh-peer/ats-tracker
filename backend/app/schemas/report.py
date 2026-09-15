@@ -34,6 +34,25 @@ class TimeToFillSummary(BaseModel):
     filled_jobs_count: int
 
 
+class HiringTrendPoint(BaseModel):
+    month: str
+    offers: int
+    hires: int
+
+
+class ScoreDistributionBucket(BaseModel):
+    bucket: str
+    count: int
+
+
+class OfferMetrics(BaseModel):
+    sent: int
+    accepted: int
+    declined: int
+    pending: int
+    acceptance_rate: float | None
+
+
 class RecruiterDashboard(BaseModel):
     open_jobs: int
     applications_this_week: int

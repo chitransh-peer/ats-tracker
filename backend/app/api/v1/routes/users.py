@@ -10,7 +10,10 @@ from app.schemas.auth import CurrentUser
 from app.schemas.user import AssignRolesRequest, UserRead, UserUpdate
 from app.services.audit.service import record as record_audit
 from app.services.auth import service as auth_service
+from app.services.mail import messages as mail_messages
+from app.services.organizations import service as organization_service
 from app.services.users import service as user_service
+from app.workers.tasks.mail import send_email_task
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -61,6 +64,15 @@ def invite_user(
         role_name=payload.role_name,
         invited_by=current_user.id,
     )
+
+    organization = organization_service.get_organization(db, current_user.organization_id)
+    subject, text_body, html_body = mail_messages.invitation(
+        token=token, organization_name=organization.name, role_name=payload.role_name
+    )
+    send_email_task.send(payload.email, subject, text_body, html_body)
+
+    # The token stays in the response so an admin can still pass the link on by
+    # hand — useful when mail is unconfigured or the invite lands in spam.
     return InviteUserResponse(email=payload.email, role_name=payload.role_name, invitation_token=token)
 
 

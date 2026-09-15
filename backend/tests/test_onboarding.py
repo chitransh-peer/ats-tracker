@@ -48,9 +48,7 @@ def test_accepting_offer_is_idempotent_for_onboarding(
 
     _accepted_offer(client, r_headers, a_headers, application.id)
     # A second accept must not create a duplicate case (offer is already Accepted -> 422).
-    cases = client.get(
-        f"/api/v1/onboarding?application_id={application.id}", headers=r_headers
-    ).json()
+    cases = client.get(f"/api/v1/onboarding?application_id={application.id}", headers=r_headers).json()
     assert len(cases) == 1
 
 
@@ -64,9 +62,7 @@ def test_completing_case_requires_all_tasks_done_and_hires_candidate(
     application = make_application(candidate=make_candidate(), job=make_job())
     _accepted_offer(client, r_headers, a_headers, application.id)
 
-    case = client.get(
-        f"/api/v1/onboarding?application_id={application.id}", headers=r_headers
-    ).json()[0]
+    case = client.get(f"/api/v1/onboarding?application_id={application.id}", headers=r_headers).json()[0]
 
     # Cannot complete while tasks are still pending.
     premature = client.post(f"/api/v1/onboarding/{case['id']}/complete", headers=r_headers)
@@ -89,18 +85,14 @@ def test_completing_case_requires_all_tasks_done_and_hires_candidate(
     assert apps[0]["status"] == "Hired"
 
 
-def test_add_custom_task_and_update_case(
-    client, make_user, make_job, make_candidate, make_application, auth_headers
-):
+def test_add_custom_task_and_update_case(client, make_user, make_job, make_candidate, make_application, auth_headers):
     recruiter, rp = make_user(role_names=[RoleName.RECRUITER.value])
     admin, ap = make_user(role_names=[RoleName.ADMIN.value])
     r_headers = auth_headers(recruiter.email, rp)
     a_headers = auth_headers(admin.email, ap)
     application = make_application(candidate=make_candidate(), job=make_job())
     _accepted_offer(client, r_headers, a_headers, application.id)
-    case = client.get(
-        f"/api/v1/onboarding?application_id={application.id}", headers=r_headers
-    ).json()[0]
+    case = client.get(f"/api/v1/onboarding?application_id={application.id}", headers=r_headers).json()[0]
 
     added = client.post(
         f"/api/v1/onboarding/{case['id']}/tasks",
@@ -126,9 +118,7 @@ def test_cancel_case(client, make_user, make_job, make_candidate, make_applicati
     a_headers = auth_headers(admin.email, ap)
     application = make_application(candidate=make_candidate(), job=make_job())
     _accepted_offer(client, r_headers, a_headers, application.id)
-    case = client.get(
-        f"/api/v1/onboarding?application_id={application.id}", headers=r_headers
-    ).json()[0]
+    case = client.get(f"/api/v1/onboarding?application_id={application.id}", headers=r_headers).json()[0]
 
     cancelled = client.post(f"/api/v1/onboarding/{case['id']}/cancel", headers=r_headers)
     assert cancelled.status_code == 200
@@ -138,9 +128,7 @@ def test_cancel_case(client, make_user, make_job, make_candidate, make_applicati
     assert client.post(f"/api/v1/onboarding/{case['id']}/complete", headers=r_headers).status_code == 422
 
 
-def test_interviewer_cannot_read_onboarding(
-    client, make_user, make_job, make_candidate, make_application, auth_headers
-):
+def test_interviewer_cannot_read_onboarding(client, make_user, make_job, make_candidate, make_application, auth_headers):
     interviewer, ip = make_user(role_names=[RoleName.INTERVIEWER.value])
     i_headers = auth_headers(interviewer.email, ip)
     resp = client.get("/api/v1/onboarding", headers=i_headers)

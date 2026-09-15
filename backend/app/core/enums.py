@@ -37,6 +37,8 @@ class PermissionResource(str, enum.Enum):
     AUDIT_LOG = "audit_log"
     CLIENT = "client"
     VENDOR = "vendor"
+    TALENT_BENCH = "talent_bench"
+    HOTLIST = "hotlist"
 
 
 class InvitationStatus(str, enum.Enum):
@@ -83,6 +85,7 @@ class AuditAction(str, enum.Enum):
     OFFER_SENT = "offer_sent"
     TEMPLATE_CREATED = "template_created"
     TEMPLATE_UPDATED = "template_updated"
+    TEMPLATE_DELETED = "template_deleted"
     RESUME_PARSED = "resume_parsed"
     AI_EVALUATION_TRIGGERED = "ai_evaluation_triggered"
     AI_EVALUATION_OVERRIDDEN = "ai_evaluation_overridden"
@@ -92,6 +95,13 @@ class AuditAction(str, enum.Enum):
     ONBOARDING_TASK_UPDATED = "onboarding_task_updated"
     ONBOARDING_COMPLETED = "onboarding_completed"
     ONBOARDING_CANCELLED = "onboarding_cancelled"
+    BENCH_PROFILE_CREATED = "bench_profile_created"
+    BENCH_PROFILE_UPDATED = "bench_profile_updated"
+    BENCH_PROFILE_REMOVED = "bench_profile_removed"
+    HOTLIST_CREATED = "hotlist_created"
+    HOTLIST_UPDATED = "hotlist_updated"
+    HOTLIST_RECIPIENTS_IMPORTED = "hotlist_recipients_imported"
+    HOTLIST_SENT = "hotlist_sent"
 
 
 class JobStatus(str, enum.Enum):
@@ -246,6 +256,7 @@ class CommunicationTemplateType(str, enum.Enum):
     REJECTION = "Rejection"
     FOLLOW_UP = "Follow-up"
     ACKNOWLEDGMENT = "Acknowledgment"
+    HOTLIST = "Hotlist"
 
 
 class OutboundMessageStatus(str, enum.Enum):
@@ -273,3 +284,55 @@ class OnboardingTaskCategory(str, enum.Enum):
     EQUIPMENT = "Equipment"
     PROVISIONING = "Provisioning"
     ORIENTATION = "Orientation"
+
+
+class BenchStatus(str, enum.Enum):
+    ACTIVE = "Active Bench"
+    INACTIVE = "Inactive Bench"
+    PLACED = "Placed"
+    DO_NOT_MARKET = "Do Not Market"
+
+
+class BenchSubStatus(str, enum.Enum):
+    AVAILABLE = "Available"
+    IN_MARKETING = "In Marketing"
+    SUBMITTED = "Submitted"
+    INTERVIEWING = "Interviewing"
+    OFFER_IN_HAND = "Offer In Hand"
+    ON_PROJECT = "On Project"
+    NOT_REACHABLE = "Not Reachable"
+
+
+class RateUnit(str, enum.Enum):
+    HOURLY = "Hourly"
+    DAILY = "Daily"
+    MONTHLY = "Monthly"
+    ANNUAL = "Annual"
+
+
+class TaxTerm(str, enum.Enum):
+    C2C = "C2C"
+    W2 = "W2"
+    ONE_NINE_NINE_NINE = "1099"
+    FULL_TIME = "Full Time"
+
+
+class HotlistStatus(str, enum.Enum):
+    DRAFT = "Draft"
+    READY = "Ready"
+    SENT = "Sent"
+    ARCHIVED = "Archived"
+
+
+class HotlistRecipientKind(str, enum.Enum):
+    CLIENT = "client"
+    VENDOR = "vendor"
+    MANUAL = "manual"
+    IMPORTED = "imported"
+
+
+class HotlistSendStatus(str, enum.Enum):
+    PENDING = "pending"
+    SENDING = "sending"
+    COMPLETED = "completed"
+    FAILED = "failed"

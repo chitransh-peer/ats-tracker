@@ -20,8 +20,13 @@ export function useInviteUser() {
 export function useUpdateUser() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ userId, input }: { userId: string; input: { full_name?: string; is_active?: boolean } }) =>
-      usersApi.updateUser(userId, input),
+    mutationFn: ({
+      userId,
+      input,
+    }: {
+      userId: string;
+      input: { full_name?: string; is_active?: boolean };
+    }) => usersApi.updateUser(userId, input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["users"] }),
   });
 }

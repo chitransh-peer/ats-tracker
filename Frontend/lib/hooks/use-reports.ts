@@ -23,6 +23,39 @@ export function useRecruiterDashboard() {
   });
 }
 
+export function useExecutiveDashboard() {
+  return useQuery({
+    queryKey: ["reports", "executive-dashboard"],
+    queryFn: reportsApi.getExecutiveDashboard,
+  });
+}
+
+export function useHiringTrend() {
+  return useQuery({ queryKey: ["reports", "hiring-trend"], queryFn: reportsApi.getHiringTrend });
+}
+
+export function useScoreDistribution() {
+  return useQuery({
+    queryKey: ["reports", "score-distribution"],
+    queryFn: reportsApi.getScoreDistribution,
+  });
+}
+
+export function useOfferMetrics() {
+  return useQuery({ queryKey: ["reports", "offer-metrics"], queryFn: reportsApi.getOfferMetrics });
+}
+
+export function useTimeToFill() {
+  return useQuery({ queryKey: ["reports", "time-to-fill"], queryFn: reportsApi.getTimeToFill });
+}
+
+export function useRecruiterPerformance() {
+  return useQuery({
+    queryKey: ["reports", "recruiter-performance"],
+    queryFn: reportsApi.getRecruiterPerformance,
+  });
+}
+
 export function useAuditLogs(enabled = true) {
   return useQuery({ queryKey: ["audit-logs"], queryFn: reportsApi.getAuditLogs, enabled });
 }

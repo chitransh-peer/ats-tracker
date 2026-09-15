@@ -2,17 +2,18 @@ import pytest
 
 from app.core.config import get_settings
 from app.core.enums import AIEvaluationStatus, CandidateDocumentType, RoleName
+from app.core.exceptions import ValidationAppError
+from app.db.models.ai import AIEvaluationOverride
+from app.services.ai import evaluation as evaluation_service
+from app.services.ai import resume_parsing as resume_parsing_service
+from app.services.ai.provider import AIProviderError
+from app.services.candidates.service import add_document
 
 _W = get_settings().evaluation_skill_weight  # skill vs semantic blend weight
 
 
 def _blend(skill: float, semantic: float) -> float:
     return _W * skill + (1 - _W) * semantic
-from app.db.models.ai import AIEvaluationOverride
-from app.services.ai import evaluation as evaluation_service
-from app.services.ai import resume_parsing as resume_parsing_service
-from app.services.ai.provider import AIProviderError
-from app.services.candidates.service import add_document
 
 
 def _canned_semantic_response(*_args, **_kwargs):
@@ -113,9 +114,7 @@ def test_embedding_and_llm_scores_are_averaged_when_both_available(
     assert evaluation.strengths == ["Strong Python background"]
 
 
-def test_embedding_score_used_even_when_llm_unavailable(
-    db, make_job, make_candidate, make_application, monkeypatch
-):
+def test_embedding_score_used_even_when_llm_unavailable(db, make_job, make_candidate, make_application, monkeypatch):
     def _raise(*_args, **_kwargs):
         raise AIProviderError("provider not configured")
 
@@ -167,10 +166,8 @@ def test_cannot_override_pending_evaluation(db, make_job, make_candidate, make_a
         db, organization_id=application.organization_id, application_id=application.id, actor_id=None
     )
 
-    with pytest.raises(Exception):
-        evaluation_service.override_evaluation(
-            db, evaluation, actor_id=None, new_recommendation="fit", note=None
-        )
+    with pytest.raises(ValidationAppError, match="Only completed evaluations"):
+        evaluation_service.override_evaluation(db, evaluation, actor_id=None, new_recommendation="fit", note=None)
 
 
 def test_parse_resume_stores_structured_fields(db, make_candidate, monkeypatch):
@@ -191,8 +188,13 @@ def test_parse_resume_stores_structured_fields(db, make_candidate, monkeypatch):
 
     candidate = make_candidate()
     document = add_document(
-        db, candidate, document_type=CandidateDocumentType.RESUME.value, file_name="resume.txt",
-        content_type="text/plain", data=b"Jane Doe resume text", uploaded_by=None,
+        db,
+        candidate,
+        document_type=CandidateDocumentType.RESUME.value,
+        file_name="resume.txt",
+        content_type="text/plain",
+        data=b"Jane Doe resume text",
+        uploaded_by=None,
     )
 
     run = resume_parsing_service.create_pending_run(

@@ -5,9 +5,11 @@ from app.api.v1.routes import (
     applications,
     audit,
     auth,
+    bench,
     candidates,
     careers,
     clients,
+    hotlists,
     interviews,
     jobs,
     offers,
@@ -40,3 +42,5 @@ api_router.include_router(reports.router)
 api_router.include_router(audit.router)
 api_router.include_router(settings.router)
 api_router.include_router(ai.router)
+api_router.include_router(bench.router)
+api_router.include_router(hotlists.router)

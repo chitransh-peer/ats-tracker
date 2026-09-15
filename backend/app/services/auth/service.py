@@ -1,7 +1,7 @@
 import hashlib
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from sqlalchemy import select
@@ -39,7 +39,7 @@ def _store_refresh_token(db: Session, user_id: uuid.UUID, refresh_token: str) ->
         RefreshToken(
             user_id=user_id,
             token_hash=_hash_token(refresh_token),
-            expires_at=datetime.fromtimestamp(decoded["exp"], tz=timezone.utc),
+            expires_at=datetime.fromtimestamp(decoded["exp"], tz=UTC),
         )
     )
 
@@ -77,20 +77,20 @@ def refresh(db: Session, *, refresh_token: str) -> tuple[str, str]:
     try:
         decoded = decode_token(refresh_token)
     except jwt.PyJWTError:
-        raise UnauthorizedError("Invalid or expired refresh token")
+        raise UnauthorizedError("Invalid or expired refresh token") from None
 
     if decoded.get("type") != "refresh":
         raise UnauthorizedError("Invalid token type")
 
     stored = db.scalar(select(RefreshToken).where(RefreshToken.token_hash == _hash_token(refresh_token)))
-    if stored is None or not stored.is_active or stored.expires_at < datetime.now(timezone.utc):
+    if stored is None or not stored.is_active or stored.expires_at < datetime.now(UTC):
         raise UnauthorizedError("Refresh token has been revoked or expired")
 
     user = db.get(User, uuid.UUID(decoded["sub"]))
     if user is None or not user.is_active:
         raise UnauthorizedError("Invalid or expired refresh token")
 
-    stored.revoked_at = datetime.now(timezone.utc)
+    stored.revoked_at = datetime.now(UTC)
     access_token, new_refresh_token = _issue_token_pair(db, user)
     db.commit()
     return access_token, new_refresh_token
@@ -99,7 +99,7 @@ def refresh(db: Session, *, refresh_token: str) -> tuple[str, str]:
 def logout(db: Session, *, refresh_token: str) -> None:
     stored = db.scalar(select(RefreshToken).where(RefreshToken.token_hash == _hash_token(refresh_token)))
     if stored is not None and stored.is_active:
-        stored.revoked_at = datetime.now(timezone.utc)
+        stored.revoked_at = datetime.now(UTC)
         db.commit()
 
 
@@ -126,7 +126,7 @@ def create_invitation(
         invited_by=invited_by,
         token_hash=_hash_token(raw_token),
         status=InvitationStatus.PENDING.value,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=expires_in_days),
+        expires_at=datetime.now(UTC) + timedelta(days=expires_in_days),
     )
     db.add(invitation)
     record_audit(
@@ -145,7 +145,7 @@ def accept_invitation(db: Session, *, token: str, full_name: str, password: str)
     invitation = db.scalar(select(Invitation).where(Invitation.token_hash == _hash_token(token)))
     if invitation is None or invitation.status != InvitationStatus.PENDING.value:
         raise UnauthorizedError("Invalid or expired invitation")
-    if invitation.expires_at < datetime.now(timezone.utc):
+    if invitation.expires_at < datetime.now(UTC):
         invitation.status = InvitationStatus.EXPIRED.value
         db.commit()
         raise UnauthorizedError("This invitation has expired")
@@ -162,7 +162,7 @@ def accept_invitation(db: Session, *, token: str, full_name: str, password: str)
     db.add(UserRole(user_id=user.id, role_id=invitation.role_id))
 
     invitation.status = InvitationStatus.ACCEPTED.value
-    invitation.accepted_at = datetime.now(timezone.utc)
+    invitation.accepted_at = datetime.now(UTC)
 
     record_audit(
         db,
@@ -191,7 +191,7 @@ def request_password_reset(db: Session, *, email: str, expires_in_minutes: int =
         PasswordResetToken(
             user_id=user.id,
             token_hash=_hash_token(raw_token),
-            expires_at=datetime.now(timezone.utc) + timedelta(minutes=expires_in_minutes),
+            expires_at=datetime.now(UTC) + timedelta(minutes=expires_in_minutes),
         )
     )
     record_audit(
@@ -208,7 +208,7 @@ def request_password_reset(db: Session, *, email: str, expires_in_minutes: int =
 
 def reset_password(db: Session, *, token: str, new_password: str) -> None:
     reset_token = db.scalar(select(PasswordResetToken).where(PasswordResetToken.token_hash == _hash_token(token)))
-    if reset_token is None or reset_token.used_at is not None or reset_token.expires_at < datetime.now(timezone.utc):
+    if reset_token is None or reset_token.used_at is not None or reset_token.expires_at < datetime.now(UTC):
         raise UnauthorizedError("Invalid or expired reset token")
 
     user = db.get(User, reset_token.user_id)
@@ -216,12 +216,12 @@ def reset_password(db: Session, *, token: str, new_password: str) -> None:
         raise UnauthorizedError("Invalid or expired reset token")
 
     user.hashed_password = hash_password(new_password)
-    reset_token.used_at = datetime.now(timezone.utc)
+    reset_token.used_at = datetime.now(UTC)
 
     db.execute(
         RefreshToken.__table__.update()
         .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
-        .values(revoked_at=datetime.now(timezone.utc))
+        .values(revoked_at=datetime.now(UTC))
     )
 
     record_audit(

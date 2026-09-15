@@ -11,7 +11,7 @@ def test_funnel_counts_max_stage_reached(client, make_user, make_job, make_candi
     headers = auth_headers(user.email, password)
     job = make_job()
 
-    app1 = client.post(
+    client.post(
         "/api/v1/applications", json={"candidate_id": str(make_candidate().id), "job_id": str(job.id)}, headers=headers
     ).json()
     app2 = client.post(

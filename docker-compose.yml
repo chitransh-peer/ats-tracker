@@ -42,6 +42,20 @@ services:
       timeout: 5s
       retries: 10
 
+  # Development mail catcher: accepts SMTP on 1025 and shows every message in a
+  # web inbox on http://localhost:8025. Nothing leaves the machine. Point
+  # SMTP_HOST=mailpit to exercise the real send path without a provider.
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   backend:
     build: ./backend
     env_file:
@@ -75,19 +89,33 @@ services:
     command: dramatiq app.workers.tasks
 
   frontend:
-    build: ./Frontend
+    build:
+      context: ./Frontend
+      # The default target is the production runtime, which serves a prebuilt
+      # bundle. Development needs the dev server and hot reload.
+      target: dev
     ports:
-      - "3000:3000"
+      # Override with FRONTEND_PORT if something already holds 3000 — most often
+      # a `npm run dev` started outside Docker for the same project.
+      - "${FRONTEND_PORT:-3000}:3000"
     environment:
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
     depends_on:
       - backend
     volumes:
       - ./Frontend:/app
+      # node_modules and .next get their own volumes so the container keeps a
+      # separate copy from the host. Without the .next volume, a host-side
+      # `next dev` or `next build` and the container write to the same build
+      # cache through the bind mount and corrupt each other's output — the
+      # symptom is "Cannot find module './vendor-chunks/...'" or a missing
+      # _document.js on every route.
       - frontend_node_modules:/app/node_modules
+      - frontend_next_cache:/app/.next
 
 volumes:
   postgres_data:
   minio_data:
   frontend_node_modules:
+  frontend_next_cache:
   model_cache:

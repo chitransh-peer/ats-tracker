@@ -48,9 +48,7 @@ def update_case(
     db: Session = Depends(get_db_session),
 ) -> OnboardingCaseRead:
     case = onboarding_service.get_case(db, current_user.organization_id, case_id, viewer=current_user)
-    case = onboarding_service.update_case(
-        db, case, actor_id=current_user.id, **payload.model_dump(exclude_unset=True)
-    )
+    case = onboarding_service.update_case(db, case, actor_id=current_user.id, **payload.model_dump(exclude_unset=True))
     db.commit()
     return case
 
