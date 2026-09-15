@@ -15,6 +15,7 @@ env:
   REPOSITORY: "ats-artifacts"
   SERVICE_NAME: "ats-backend"
   FRONTEND_URL: "https://ats-frontend-665490213826.us-central1.run.app"
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
 
 jobs:
   deploy:
@@ -49,9 +50,9 @@ jobs:
           image: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
           flags: |
             --allow-unauthenticated
-            --port=8000
+            --timeout=300
             --add-cloudsql-instances=peer-website-504716:us-central1:ats-db-instance
-            --set-env-vars=APP_ENV=production,CORS_ORIGINS=${{ env.FRONTEND_URL }},JWT_SECRET=production-ats-tracker-jwt-secret-key-32chars,DATABASE_URL=postgresql+psycopg2://ats:${{ secrets.DB_PASSWORD }}@/ats_tracker?host=/cloudsql/peer-website-504716:us-central1:ats-db-instance
+            --set-env-vars=APP_ENV=production,CORS_ORIGINS=${{ env.FRONTEND_URL }},JWT_SECRET=production-ats-tracker-jwt-secret-key-32chars,DATABASE_URL=postgresql://ats:${{ secrets.DB_PASSWORD }}@/ats_tracker?host=/cloudsql/peer-website-504716:us-central1:ats-db-instance
 
       - name: Show Output URL
         run: echo "Backend deployed to ${{ steps.deploy.outputs.url }}"
