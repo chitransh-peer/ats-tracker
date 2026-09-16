@@ -1,4 +1,5 @@
 import smtplib
+from datetime import UTC, datetime
 
 import pytest
 
@@ -96,14 +97,43 @@ def test_reset_link_points_at_the_configured_frontend(mail_settings):
     assert "30 minutes" in text
 
 
-def test_invitation_link_points_at_the_accept_page(mail_settings):
+def test_invitation_carries_the_credential_and_points_at_the_login_page(mail_settings):
     mail_settings.app_base_url = "https://ats.example.com"
 
-    subject, text, _html = messages.invitation(token="abc", organization_name="Peer Consulting", role_name="hiring_manager")
+    subject, text, html = messages.invitation(
+        full_name="Ada Lovelace",
+        email="ada@example.com",
+        temporary_password="Abcdef-Ghjkmn-Pqrstu",
+        organization_name="Peer Consulting",
+        role_name="hiring_manager",
+        expires_at=datetime(2026, 9, 20, 9, 30, tzinfo=UTC),
+    )
 
     assert "Peer Consulting" in subject
-    assert "https://ats.example.com/auth/invite/accept?token=abc" in text
+    # There is no acceptance page any more -- the account already exists.
+    assert "/auth/invite/accept" not in text
+    assert "https://ats.example.com/auth/login" in text
+    # Both halves of the credential have to be present, or the mail is useless.
+    assert "ada@example.com" in text
+    assert "Abcdef-Ghjkmn-Pqrstu" in text
+    assert "Abcdef-Ghjkmn-Pqrstu" in html
     assert "hiring manager" in text
+    assert "20 Sep 2026" in text
+
+
+def test_invitation_without_an_expiry_says_so(mail_settings):
+    mail_settings.app_base_url = "https://ats.example.com"
+
+    _subject, text, _html = messages.invitation(
+        full_name="Ada Lovelace",
+        email="ada@example.com",
+        temporary_password="Abcdef-Ghjkmn-Pqrstu",
+        organization_name="Peer Consulting",
+        role_name="recruiter",
+        expires_at=None,
+    )
+
+    assert "until you sign in and change it" in text
 
 
 def test_forgot_password_response_is_identical_for_unknown_emails(client, make_user, mail_settings):

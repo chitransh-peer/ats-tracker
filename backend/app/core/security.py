@@ -37,13 +37,17 @@ def _create_token(
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-def create_access_token(user_id: str, org_id: str, role_names: list[str]) -> str:
+def create_access_token(user_id: str, org_id: str, role_names: list[str], must_change_password: bool = False) -> str:
     settings = get_settings()
     return _create_token(
         subject=user_id,
         token_type="access",
         expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
-        extra_claims={"org_id": org_id, "roles": role_names},
+        # must_change_password travels in the token so the gate costs no database
+        # round trip, exactly like roles. It is therefore only as fresh as the
+        # token: completing a password change issues a new pair rather than
+        # waiting for this one to expire.
+        extra_claims={"org_id": org_id, "roles": role_names, "must_change_password": must_change_password},
     )
 
 

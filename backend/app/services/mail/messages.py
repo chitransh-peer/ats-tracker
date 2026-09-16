@@ -6,6 +6,7 @@ function returns ``(subject, text_body, html_body)`` — the plain-text part is
 always populated, because it is what spam filters read and some clients prefer.
 """
 
+from datetime import datetime
 from html import escape
 from urllib.parse import quote
 
@@ -55,32 +56,69 @@ def password_reset(*, token: str, expires_in_minutes: int) -> tuple[str, str, st
     return subject, text, html
 
 
-def invitation(*, token: str, organization_name: str, role_name: str) -> tuple[str, str, str]:
-    url = _link("/auth/invite/accept", token)
+def invitation(
+    *,
+    full_name: str,
+    email: str,
+    temporary_password: str,
+    organization_name: str,
+    role_name: str,
+    expires_at: datetime | None,
+) -> tuple[str, str, str]:
+    """The one email that carries a credential.
+
+    The temporary password is shown in full because the recipient has to type
+    it, and it is the only copy -- nothing can recover it afterwards. Both the
+    address to sign in with and the deadline are spelled out, since the account
+    is useless without the first and dead after the second.
+    """
+    base = get_settings().app_base_url.rstrip("/")
+    url = f"{base}/auth/login"
     role_label = role_name.replace("_", " ")
-    subject = f"You've been invited to {organization_name} on ATS Tracker"
+    subject = f"Your {organization_name} account is ready"
+    deadline = expires_at.strftime("%d %b %Y at %H:%M UTC") if expires_at is not None else None
+    expiry_sentence = (
+        f"This temporary password stops working on {deadline}."
+        if deadline
+        else "This temporary password works until you sign in and change it."
+    )
 
     text = (
-        f"You've been invited to join {organization_name} on ATS Tracker as a {role_label}.\n\n"
-        f"Set your name and password to activate your account:\n{url}\n\n"
-        "Your password is chosen by you and is never visible to anyone else, "
-        "including the person who invited you.\n"
+        f"Hello {full_name},\n\n"
+        f"An account has been created for you at {organization_name} on ATS Tracker "
+        f"as a {role_label}.\n\n"
+        f"Sign in at: {url}\n"
+        f"Email: {email}\n"
+        f"Temporary password: {temporary_password}\n\n"
+        f"{expiry_sentence} You will be asked to choose your own password as soon "
+        "as you sign in, and this one stops working at that point.\n\n"
+        "If you were not expecting this, you can ignore this email -- the account "
+        "cannot be used until someone signs in with the password above.\n"
     )
 
     html = layout.render(
-        heading="You've been invited",
-        preheader=f"Activate your {organization_name} recruiting account.",
+        heading="Your account is ready",
+        preheader=f"Sign in to {organization_name} with your temporary password.",
         body_html=(
-            layout.paragraph(f"You've been invited to join {organization_name} on ATS Tracker as a {role_label}.")
-            + layout.paragraph("Set your name and a password to activate your account.")
-            + layout.button(url, "Activate your account")
-            + layout.muted(
-                "You choose your own password — it is never visible to anyone else, including the person who invited you."
+            layout.paragraph(f"Hello {escape(full_name)},")
+            + layout.paragraph(
+                f"An account has been created for you at {escape(organization_name)} "
+                f"on ATS Tracker as a {escape(role_label)}."
             )
-            + layout.muted("If the button doesn't work, copy this address into your browser:")
-            + layout.code_block(url)
+            + layout.paragraph("Sign in with this email address and temporary password:")
+            + layout.code_block(escape(email))
+            + layout.code_block(escape(temporary_password))
+            + layout.button(url, "Sign in")
+            + layout.muted(
+                f"{escape(expiry_sentence)} You will be asked to choose your own password "
+                "as soon as you sign in, and this one stops working at that point."
+            )
+            + layout.muted(
+                "If you were not expecting this, you can ignore this email - the account "
+                "cannot be used until someone signs in with the password above."
+            )
         ),
-        footer_note=f"Sent by {organization_name} because you were invited to their recruiting workspace.",
+        footer_note=f"Sent by {organization_name} because an account was created for you.",
     )
     return subject, text, html
 

@@ -1,13 +1,14 @@
 import { apiClient } from "./client";
-import type { User } from "./types";
+import type { InvitedUser, User } from "./types";
 
 export function listUsers() {
   return apiClient.get<User[]>("/users");
 }
 
-export function inviteUser(email: string, roleName: string) {
-  return apiClient.post<{ email: string; role_name: string; invitation_token: string }>("/users", {
+export function inviteUser(email: string, fullName: string, roleName: string) {
+  return apiClient.post<InvitedUser>("/users", {
     email,
+    full_name: fullName,
     role_name: roleName,
   });
 }
@@ -18,8 +19,4 @@ export function updateUser(userId: string, input: { full_name?: string; is_activ
 
 export function assignRoles(userId: string, roleNames: string[]) {
   return apiClient.post<User>(`/users/${userId}/roles`, { role_names: roleNames });
-}
-
-export function acceptInvite(input: { token: string; full_name: string; password: string }) {
-  return apiClient.post<{ id: string; email: string }>("/auth/invite/accept", input);
 }

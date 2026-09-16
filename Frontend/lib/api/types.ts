@@ -4,9 +4,21 @@ export interface CurrentUserProfile {
   email: string;
   full_name: string;
   is_active: boolean;
+  /** True while the account still holds the temporary password it was invited
+   * with. The API refuses every other route until it is cleared. */
+  must_change_password: boolean;
   roles: string[];
   created_at: string;
   updated_at: string;
+}
+
+export interface InvitedUser {
+  email: string;
+  full_name: string;
+  role_name: string;
+  /** Returned once, at creation, and not recoverable afterwards. */
+  temporary_password: string;
+  expires_at: string;
 }
 
 export interface TokenPair {
@@ -591,6 +603,8 @@ export interface User {
   email: string;
   full_name: string;
   is_active: boolean;
+  /** True while the account still holds the temporary password it was invited with. */
+  must_change_password: boolean;
   roles: string[];
   created_at: string;
   updated_at: string;

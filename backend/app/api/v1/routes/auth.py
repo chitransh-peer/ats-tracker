@@ -8,10 +8,10 @@ from app.core.exceptions import ForbiddenError, ValidationAppError
 from app.core.rate_limit import limiter
 from app.core.security import create_view_as_token
 from app.schemas.auth import (
+    ChangePasswordRequest,
     CurrentUser,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
-    InviteAcceptRequest,
     LoginRequest,
     LogoutRequest,
     RefreshRequest,
@@ -81,28 +81,39 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db_s
     auth_service.reset_password(db, token=payload.token, new_password=payload.new_password)
 
 
-@router.post("/invite/accept", response_model=UserRead, status_code=201)
-def accept_invite(payload: InviteAcceptRequest, db: Session = Depends(get_db_session)) -> UserRead:
-    user = auth_service.accept_invitation(db, token=payload.token, full_name=payload.full_name, password=payload.password)
+@router.post("/change-password", response_model=TokenPair)
+def change_password(
+    payload: ChangePasswordRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> TokenPair:
+    """Set your own password, completing an invitation if one is outstanding.
 
-    roles = role_names_for_user(user)
-    # Confirmation that the account is live. Carries no credential, and gives the
-    # person a way to react if it wasn't them who activated it.
-    subject, text_body, html_body = mail_messages.account_created(
-        full_name=user.full_name, email=user.email, role_names=roles
-    )
-    send_email_task.send(user.email, subject, text_body, html_body)
+    Reachable while must_change_password is set — see the exempt paths in
+    app/api/deps.py — so an invited user can get themselves out of that state.
 
-    return UserRead(
-        id=user.id,
-        organization_id=user.organization_id,
-        email=user.email,
-        full_name=user.full_name,
-        is_active=user.is_active,
-        roles=roles,
-        created_at=user.created_at,
-        updated_at=user.updated_at,
+    Returns a fresh token pair because changing the password revokes every
+    existing refresh token, and because the old access token still carries the
+    stale must_change_password claim that would keep the gate closed.
+    """
+    user = get_user_by_id(db, current_user.organization_id, current_user.id)
+    completed_invitation = auth_service.change_password(
+        db,
+        user=user,
+        current_password=payload.current_password,
+        new_password=payload.new_password,
     )
+
+    if completed_invitation:
+        # Confirmation that the account is live. Carries no credential, and gives
+        # the person a way to react if it wasn't them who activated it.
+        subject, text_body, html_body = mail_messages.account_created(
+            full_name=user.full_name, email=user.email, role_names=role_names_for_user(user)
+        )
+        send_email_task.send(user.email, subject, text_body, html_body)
+
+    access_token, refresh_token = auth_service.issue_tokens_for(db, user)
+    return TokenPair(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post("/view-as", response_model=ViewAsResponse)
@@ -141,6 +152,7 @@ def me(current_user: CurrentUser = Depends(get_current_user), db: Session = Depe
         email=user.email,
         full_name=user.full_name,
         is_active=user.is_active,
+        must_change_password=user.must_change_password,
         roles=role_names_for_user(user),
         created_at=user.created_at,
         updated_at=user.updated_at,

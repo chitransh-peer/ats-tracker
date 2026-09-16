@@ -24,8 +24,10 @@ export function LoginClient() {
     setError(null);
     setLoading(true);
     try {
-      await login(email, password);
-      router.push("/");
+      const mustChangePassword = await login(email, password);
+      // An invited account cannot use anything else until it has its own
+      // password, so go straight there rather than bouncing off the dashboard.
+      router.push(mustChangePassword ? "/auth/change-password" : "/");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
     } finally {

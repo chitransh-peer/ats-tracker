@@ -2,12 +2,12 @@ import uuid
 from collections.abc import Generator
 
 import jwt
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.core.enums import PermissionAction, PermissionResource, RoleName
-from app.core.exceptions import ForbiddenError, UnauthorizedError
+from app.core.exceptions import ForbiddenError, PasswordChangeRequiredError, UnauthorizedError
 from app.core.security import decode_token
 from app.db.session import get_db
 from app.schemas.auth import CurrentUser
@@ -20,7 +20,22 @@ def get_db_session() -> Generator[Session, None, None]:
     yield from get_db()
 
 
+# The only routes an account still holding a temporary password may reach.
+# Everything else is refused until they have chosen their own password:
+# /auth/me so the app can render who they are and why they are being stopped,
+# /auth/change-password so they can do something about it, and /auth/logout so
+# they are never trapped in a session they cannot leave.
+_PASSWORD_CHANGE_EXEMPT_PATHS = frozenset(
+    {
+        "/api/v1/auth/me",
+        "/api/v1/auth/change-password",
+        "/api/v1/auth/logout",
+    }
+)
+
+
 def get_current_user(
+    request: Request,
     token: str | None = Depends(_oauth2_scheme),
 ) -> CurrentUser:
     if token is None:
@@ -33,6 +48,12 @@ def get_current_user(
 
     if decoded.get("type") != "access":
         raise UnauthorizedError("Invalid token type")
+
+    # Enforced here rather than in the frontend so it cannot be stepped around by
+    # editing the URL or calling the API directly. Every authenticated route
+    # depends on this function, so the gate covers all of them by construction.
+    if decoded.get("must_change_password") and request.url.path.rstrip("/") not in _PASSWORD_CHANGE_EXEMPT_PATHS:
+        raise PasswordChangeRequiredError()
 
     return CurrentUser(
         id=uuid.UUID(decoded["sub"]),

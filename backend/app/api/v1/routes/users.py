@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -20,13 +21,20 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 class InviteUserRequest(BaseModel):
     email: str
+    full_name: str
     role_name: str
 
 
 class InviteUserResponse(BaseModel):
+    """`temporary_password` is returned once, at creation, and is not stored in
+    recoverable form. It is echoed back so an admin can read it out to the
+    person directly when mail is unconfigured or the invite lands in spam."""
+
     email: str
+    full_name: str
     role_name: str
-    invitation_token: str
+    temporary_password: str
+    expires_at: datetime
 
 
 def _to_read(user) -> UserRead:
@@ -36,6 +44,7 @@ def _to_read(user) -> UserRead:
         email=user.email,
         full_name=user.full_name,
         is_active=user.is_active,
+        must_change_password=user.must_change_password,
         roles=user_service.role_names_for_user(user),
         created_at=user.created_at,
         updated_at=user.updated_at,
@@ -57,23 +66,33 @@ def invite_user(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.USER, PermissionAction.CREATE)),
     db: Session = Depends(get_db_session),
 ) -> InviteUserResponse:
-    token = auth_service.create_invitation(
+    user, temporary_password = auth_service.invite_user(
         db,
         organization_id=current_user.organization_id,
         email=payload.email,
+        full_name=payload.full_name,
         role_name=payload.role_name,
         invited_by=current_user.id,
     )
 
     organization = organization_service.get_organization(db, current_user.organization_id)
     subject, text_body, html_body = mail_messages.invitation(
-        token=token, organization_name=organization.name, role_name=payload.role_name
+        full_name=user.full_name,
+        email=user.email,
+        temporary_password=temporary_password,
+        organization_name=organization.name,
+        role_name=payload.role_name,
+        expires_at=user.temp_password_expires_at,
     )
-    send_email_task.send(payload.email, subject, text_body, html_body)
+    send_email_task.send(user.email, subject, text_body, html_body)
 
-    # The token stays in the response so an admin can still pass the link on by
-    # hand — useful when mail is unconfigured or the invite lands in spam.
-    return InviteUserResponse(email=payload.email, role_name=payload.role_name, invitation_token=token)
+    return InviteUserResponse(
+        email=user.email,
+        full_name=user.full_name,
+        role_name=payload.role_name,
+        temporary_password=temporary_password,
+        expires_at=user.temp_password_expires_at,
+    )
 
 
 @router.get("/{user_id}", response_model=UserRead)

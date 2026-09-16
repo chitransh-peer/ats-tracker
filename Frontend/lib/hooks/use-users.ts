@@ -11,8 +11,15 @@ export function useUsers() {
 export function useInviteUser() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ email, roleName }: { email: string; roleName: string }) =>
-      usersApi.inviteUser(email, roleName),
+    mutationFn: ({
+      email,
+      fullName,
+      roleName,
+    }: {
+      email: string;
+      fullName: string;
+      roleName: string;
+    }) => usersApi.inviteUser(email, fullName, roleName),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["users"] }),
   });
 }

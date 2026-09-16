@@ -22,6 +22,15 @@ export function resetPassword(token: string, newPassword: string) {
   });
 }
 
+/** Sets the caller's own password. Reachable while `must_change_password` is
+ * set, and returns a fresh token pair because the old one is revoked. */
+export function changePassword(currentPassword: string, newPassword: string) {
+  return apiClient.post<TokenPair>("/auth/change-password", {
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
+}
+
 export function me() {
   return apiClient.get<CurrentUserProfile>("/auth/me");
 }

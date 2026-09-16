@@ -49,6 +49,7 @@ export function AdminClient() {
 
   const [search, setSearch] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState("recruiter");
   const [editingRole, setEditingRole] = useState<Role | null>(null);
 
@@ -60,10 +61,15 @@ export function AdminClient() {
   );
 
   function handleInvite() {
-    if (!inviteEmail) return;
+    if (!inviteEmail || !inviteName) return;
     inviteMutation.mutate(
-      { email: inviteEmail, roleName: inviteRole },
-      { onSuccess: () => setInviteEmail("") },
+      { email: inviteEmail, fullName: inviteName, roleName: inviteRole },
+      {
+        onSuccess: () => {
+          setInviteEmail("");
+          setInviteName("");
+        },
+      },
     );
   }
 
@@ -118,6 +124,12 @@ export function AdminClient() {
               </div>
               <div className="flex items-center gap-2">
                 <Input
+                  placeholder="Full name"
+                  className="h-9 max-w-[180px]"
+                  value={inviteName}
+                  onChange={(e) => setInviteName(e.target.value)}
+                />
+                <Input
                   placeholder="Email to invite"
                   type="email"
                   className="h-9 max-w-xs"
@@ -139,7 +151,7 @@ export function AdminClient() {
                 <Button
                   size="sm"
                   onClick={handleInvite}
-                  disabled={!inviteEmail || inviteMutation.isPending}
+                  disabled={!inviteEmail || !inviteName || inviteMutation.isPending}
                 >
                   {inviteMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -151,17 +163,22 @@ export function AdminClient() {
               {inviteMutation.isSuccess && inviteMutation.data && (
                 <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 space-y-1">
                   <div>
-                    Invitation created for <strong>{inviteMutation.data.email}</strong> as{" "}
-                    {formatLabel(inviteMutation.data.role_name)}.
+                    Account created for <strong>{inviteMutation.data.email}</strong> as{" "}
+                    {formatLabel(inviteMutation.data.role_name)}. An email with their temporary
+                    password is on its way.
                   </div>
                   <div>
-                    Share this activation link with them:{" "}
-                    <Link
-                      href={`/auth/invite/accept?token=${inviteMutation.data.invitation_token}`}
-                      className="font-mono underline break-all"
-                    >
-                      /auth/invite/accept?token={inviteMutation.data.invitation_token.slice(0, 12)}…
-                    </Link>
+                    {/* Shown once, and never again — nothing can recover it after this.
+                        It is here so an admin can read it out when mail is slow or the
+                        message lands in spam. */}
+                    Temporary password:{" "}
+                    <span className="font-mono font-semibold break-all">
+                      {inviteMutation.data.temporary_password}
+                    </span>
+                  </div>
+                  <div className="text-emerald-700">
+                    Valid until {new Date(inviteMutation.data.expires_at).toLocaleString()}. They
+                    will be asked to choose their own password when they first sign in.
                   </div>
                 </div>
               )}

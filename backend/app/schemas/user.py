@@ -15,6 +15,10 @@ class UserRead(BaseModel):
     email: str
     full_name: str
     is_active: bool
+    # True while the account still holds the temporary password it was invited
+    # with. The frontend uses it to route straight to the change-password screen;
+    # the API enforces the same thing independently.
+    must_change_password: bool = False
     roles: list[str]
     created_at: datetime
     updated_at: datetime

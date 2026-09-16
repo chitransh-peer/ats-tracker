@@ -26,7 +26,9 @@ def test_interviewer_cannot_create_user_invitation(client, make_user, auth_heade
     headers = auth_headers(user.email, password)
 
     response = client.post(
-        "/api/v1/users", json={"email": "new@example.com", "role_name": RoleName.RECRUITER.value}, headers=headers
+        "/api/v1/users",
+        json={"email": "new@example.com", "full_name": "New Person", "role_name": RoleName.RECRUITER.value},
+        headers=headers,
     )
 
     assert response.status_code == 403
@@ -38,12 +40,18 @@ def test_admin_can_invite_user(client, make_user, auth_headers):
 
     response = client.post(
         "/api/v1/users",
-        json={"email": "brand-new-invitee@example.com", "role_name": RoleName.RECRUITER.value},
+        json={
+            "email": "brand-new-invitee@example.com",
+            "full_name": "Brand New Invitee",
+            "role_name": RoleName.RECRUITER.value,
+        },
         headers=headers,
     )
 
     assert response.status_code == 201
     assert response.json()["email"] == "brand-new-invitee@example.com"
+    # The generated credential comes back once so an admin can relay it by hand.
+    assert response.json()["temporary_password"]
 
 
 def test_super_admin_can_assign_roles(client, make_user, auth_headers):

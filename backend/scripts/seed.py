@@ -8,8 +8,8 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.core.enums import RoleName
-from app.db.models.organization import Organization, OrganizationSettings
 from app.core.security import hash_password
+from app.db.models.organization import Organization, OrganizationSettings
 from app.db.session import SessionLocal
 from app.services.pipeline.service import seed_default_stage_template
 from app.services.roles.service import seed_roles_and_permissions

@@ -20,7 +20,9 @@ import type { CurrentUserProfile } from "@/lib/api/types";
 interface AuthContextValue {
   user: CurrentUserProfile | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  /** Resolves to true when the account must change its password before it can
+   * use anything else, so the caller can route to the change-password screen. */
+  login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   viewAsRole: string | null;
   startViewAs: (roleName: string) => Promise<void>;
@@ -62,8 +64,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const tokens = await apiLogin(email, password);
     setTokens(tokens.access_token, tokens.refresh_token);
+    // /auth/me is one of the few routes still served while a temporary password
+    // is outstanding, so this works for invited users too.
     const profile = await me();
     setUser(profile);
+    return profile.must_change_password;
   }, []);
 
   const logout = useCallback(() => {

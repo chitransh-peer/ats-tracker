@@ -74,6 +74,9 @@ export function authHeaders(): HeadersInit {
  */
 const UNAUTHENTICATED_PATHS = ["/auth/login", "/auth/refresh", "/auth/logout"];
 
+/** Frontend route, not an API path — where the forced password change lives. */
+export const CHANGE_PASSWORD_PATH = "/auth/change-password";
+
 function isUnauthenticatedPath(path: string): boolean {
   return UNAUTHENTICATED_PATHS.some((p) => path === p || path.startsWith(`${p}?`));
 }
@@ -158,6 +161,21 @@ async function request<T>(
       detail = await res.json();
     } catch {
       // response had no JSON body
+    }
+
+    // The API refuses everything but the password-change routes while a
+    // temporary password is outstanding. Send the user somewhere they can act
+    // rather than surfacing a bare 403 on whatever page they landed on.
+    if (
+      res.status === 403 &&
+      detail &&
+      typeof detail === "object" &&
+      "detail" in detail &&
+      (detail as { detail: unknown }).detail === "Password change required" &&
+      typeof window !== "undefined" &&
+      window.location.pathname !== CHANGE_PASSWORD_PATH
+    ) {
+      window.location.href = CHANGE_PASSWORD_PATH;
     }
     const message =
       detail && typeof detail === "object" && "detail" in detail

@@ -40,10 +40,9 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(min_length=12)
 
 
-class InviteAcceptRequest(BaseModel):
-    token: str
-    full_name: str
-    password: str = Field(min_length=12)
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=12)
 
 
 class ViewAsRequest(BaseModel):
