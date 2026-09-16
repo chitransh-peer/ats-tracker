@@ -1,0 +1,4 @@
+# Shell scripts run inside Linux containers. A CRLF checkout on Windows makes
+# the shebang unparsable ("no such file or directory"), so they are pinned to LF
+# regardless of the developer's core.autocrlf setting.
+*.sh text eol=lf

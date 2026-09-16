@@ -66,6 +66,18 @@ export function authHeaders(): HeadersInit {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/**
+ * Endpoints where a 401 is the endpoint's own answer ("wrong credentials",
+ * "expired reset link") rather than an expired session. The session interceptor
+ * must not touch these: refreshing makes no sense, and hard-redirecting to the
+ * login page turns a wrong password into an unexplained page reload.
+ */
+const UNAUTHENTICATED_PATHS = ["/auth/login", "/auth/refresh", "/auth/logout"];
+
+function isUnauthenticatedPath(path: string): boolean {
+  return UNAUTHENTICATED_PATHS.some((p) => path === p || path.startsWith(`${p}?`));
+}
+
 let refreshPromise: Promise<string | null> | null = null;
 
 async function refreshAccessToken(): Promise<string | null> {
@@ -113,9 +125,18 @@ async function request<T>(
   }
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  } catch {
+    // fetch only rejects when the request never got a response: DNS failure,
+    // the API being down, a blocked CORS preflight, or mixed content. Reported
+    // as an ApiError so callers render it like any other failure rather than
+    // falling through to a generic "something went wrong".
+    throw new ApiError(0, null, `Could not reach the API at ${API_BASE}. Check your connection.`);
+  }
 
-  if (res.status === 401 && allowRetry) {
+  if (res.status === 401 && allowRetry && !isUnauthenticatedPath(path)) {
     if (viewAsToken) {
       // Preview sessions aren't refreshable — drop back to the real identity.
       clearViewAsToken();

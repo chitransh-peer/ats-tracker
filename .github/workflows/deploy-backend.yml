@@ -24,6 +24,28 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # These are injected into the Cloud Run service below. An unset secret
+      # would otherwise deploy an empty value — a blank JWT signing key, or a
+      # Super Admin seeded with an empty password that nobody can log in with.
+      # Failing here is far cheaper than debugging that in the running service.
+      - name: Verify required secrets are configured
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          SUPER_ADMIN_EMAIL: ${{ secrets.SUPER_ADMIN_EMAIL }}
+          SUPER_ADMIN_PASSWORD: ${{ secrets.SUPER_ADMIN_PASSWORD }}
+        run: |
+          missing=""
+          for name in DB_PASSWORD JWT_SECRET SUPER_ADMIN_EMAIL SUPER_ADMIN_PASSWORD; do
+            eval "value=\$$name"
+            [ -n "$value" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing"
+            exit 1
+          fi
+          echo "All required secrets are present."
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -53,7 +75,7 @@ jobs:
             --port=8000
             --timeout=300
             --add-cloudsql-instances=peer-website-504716:us-central1:ats-db-instance
-            --set-env-vars=APP_ENV=production,CORS_ORIGINS=${{ env.FRONTEND_URL }},JWT_SECRET=production-ats-tracker-jwt-secret-key-32chars,SECRET_KEY=production-ats-tracker-jwt-secret-key-32chars,DATABASE_URL=postgresql+psycopg://ats:${{ secrets.DB_PASSWORD }}@/ats_tracker?host=/cloudsql/peer-website-504716:us-central1:ats-db-instance
+            --set-env-vars=^##^APP_ENV=production##CORS_ORIGINS=${{ env.FRONTEND_URL }}##APP_BASE_URL=${{ env.FRONTEND_URL }}##JWT_SECRET=${{ secrets.JWT_SECRET }}##SECRET_KEY=${{ secrets.JWT_SECRET }}##DEFAULT_SUPER_ADMIN_EMAIL=${{ secrets.SUPER_ADMIN_EMAIL }}##DEFAULT_SUPER_ADMIN_PASSWORD=${{ secrets.SUPER_ADMIN_PASSWORD }}##DATABASE_URL=postgresql+psycopg://ats:${{ secrets.DB_PASSWORD }}@/ats_tracker?host=/cloudsql/peer-website-504716:us-central1:ats-db-instance
 
       - name: Show Output URL
         run: echo "Backend deployed to ${{ steps.deploy.outputs.url }}"
