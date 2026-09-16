@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db_session, require_permission
+from app.api.deps import get_current_user, get_db_session, require_permission, require_super_admin
 from app.core.config import get_settings
 from app.core.enums import AuditAction, PermissionAction, PermissionResource
 from app.schemas.auth import CurrentUser
@@ -9,6 +10,7 @@ from app.schemas.organization import (
     EmailStatusRead,
     OrganizationRead,
     OrganizationSettingsUpdate,
+    SystemStatusRead,
 )
 from app.services.audit.service import record as record_audit
 from app.services.organizations import service as organization_service
@@ -33,6 +35,57 @@ def get_email_status(
         from_email=settings.mail_from_email,
         from_name=settings.mail_from_name,
         app_base_url=settings.app_base_url,
+    )
+
+
+@router.get("/system-status", response_model=SystemStatusRead)
+def get_system_status(
+    current_user: CurrentUser = Depends(require_super_admin),
+) -> SystemStatusRead:
+    """What this deployment is actually configured with.
+
+    Managed runtimes hand you no shell and, often, no console access either, so
+    "which environment variables did this revision actually get?" is otherwise
+    unanswerable from outside. This reports that, restricted to Super Admin and
+    limited to booleans and non-sensitive values -- whether a credential is
+    present, never the credential itself.
+    """
+    settings = get_settings()
+
+    url = make_url(settings.database_url)
+    # A Cloud SQL unix socket carries no host; the instance is named in the
+    # query string instead, which is worth showing since it is a common
+    # misconfiguration. The password never leaves this function either way.
+    socket_dir = url.query.get("host") if url.query else None
+    database_host = url.host or (str(socket_dir) if socket_dir else None)
+
+    return SystemStatusRead(
+        app_env=settings.app_env,
+        app_base_url=settings.app_base_url,
+        cors_origins=settings.cors_origin_list,
+        mail_enabled=settings.mail_enabled,
+        smtp_host=settings.smtp_host or None,
+        smtp_port=settings.smtp_port,
+        smtp_credentials_set=bool(settings.smtp_username and settings.smtp_password),
+        mail_from_email=settings.mail_from_email,
+        ai_provider=settings.ai_provider,
+        ai_model=(
+            settings.openrouter_model or None if settings.ai_provider == "openrouter" else settings.ollama_model or None
+        ),
+        ai_credentials_set=(bool(settings.openrouter_api_key) if settings.ai_provider == "openrouter" else True),
+        storage_endpoint_url=settings.storage_endpoint_url or None,
+        storage_bucket=settings.storage_bucket,
+        storage_credentials_set=bool(settings.storage_access_key and settings.storage_secret_key),
+        # The default points at a localhost Redis that does not exist on a
+        # managed runtime, so treat that as "not configured" rather than as a
+        # real broker -- it is the difference between queued work running and
+        # silently never running.
+        redis_configured=bool(settings.redis_url)
+        and "localhost" not in settings.redis_url
+        and "127.0.0.1" not in settings.redis_url,
+        embeddings_enabled=settings.embeddings_enabled,
+        database_backend=url.drivername,
+        database_host=database_host,
     )
 
 

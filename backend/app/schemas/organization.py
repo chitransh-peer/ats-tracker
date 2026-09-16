@@ -30,3 +30,37 @@ class EmailStatusRead(BaseModel):
     from_email: str
     from_name: str
     app_base_url: str
+
+
+class SystemStatusRead(BaseModel):
+    """What the running service is actually configured with.
+
+    Deliberately reports only booleans and non-sensitive values: whether a
+    credential is present, never the credential. It exists so an operator can
+    tell what a deployment picked up without shell or console access to the
+    host it runs on.
+    """
+
+    app_env: str
+    app_base_url: str
+    cors_origins: list[str]
+
+    mail_enabled: bool
+    smtp_host: str | None
+    smtp_port: int
+    smtp_credentials_set: bool
+    mail_from_email: str
+
+    ai_provider: str
+    ai_model: str | None
+    ai_credentials_set: bool
+
+    storage_endpoint_url: str | None
+    storage_bucket: str
+    storage_credentials_set: bool
+
+    redis_configured: bool
+    embeddings_enabled: bool
+
+    database_backend: str
+    database_host: str | None
