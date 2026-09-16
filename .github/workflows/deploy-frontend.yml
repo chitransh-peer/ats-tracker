@@ -1,11 +1,11 @@
-name: Deploy ATS Frontend to Cloud Run
+name: Deploy Frontend to Cloud Run
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'frontend/**'
+      - 'Frontend/**'
       - '.github/workflows/deploy-frontend.yml'
 
 env:
@@ -14,14 +14,18 @@ env:
   GAR_LOCATION: "us-central1"
   REPOSITORY: "ats-artifacts"
   SERVICE_NAME: "ats-frontend"
-  BACKEND_URL: "https://ats-backend-665490213826.us-central1.run.app"
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
+  BACKEND_API_URL: "https://ats-backend-665490213826.us-central1.run.app/api/v1"
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: ./Frontend
+
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Authenticate to Google Cloud
@@ -38,9 +42,7 @@ jobs:
 
       - name: Build and Push Docker Image
         run: |
-          docker build \
-            --build-arg NEXT_PUBLIC_API_URL=${{ env.BACKEND_URL }} \
-            -t ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }} frontend
+          docker build --build-arg NEXT_PUBLIC_API_BASE_URL=${{ env.BACKEND_API_URL }} -t ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }} .
           docker push ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
 
       - name: Deploy to Cloud Run
@@ -53,8 +55,7 @@ jobs:
           flags: |
             --allow-unauthenticated
             --port=3000
-            --timeout=300
-            --set-env-vars=NEXT_PUBLIC_API_URL=${{ env.BACKEND_URL }}
+            --set-env-vars=NEXT_PUBLIC_API_BASE_URL=${{ env.BACKEND_API_URL }}
 
       - name: Show Output URL
-        run: echo "Frontend succesfully deployed to ${{ steps.deploy.outputs.url }}"
+        run: echo "Frontend deployed to ${{ steps.deploy.outputs.url }}"
