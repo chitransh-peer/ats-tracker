@@ -55,7 +55,7 @@ jobs:
           flags: |
             --allow-unauthenticated
             --port=3000
-            --set-env-vars=NEXT_PUBLIC_API_BASE_URL=${{ env.BACKEND_API_URL }}
+            --update-env-vars=NEXT_PUBLIC_API_BASE_URL=${{ env.BACKEND_API_URL }}
 
       - name: Show Output URL
         run: echo "Frontend deployed to ${{ steps.deploy.outputs.url }}"
