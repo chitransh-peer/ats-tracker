@@ -62,7 +62,10 @@ def parse_resume(
         resource_id=str(run.id),
     )
     db.commit()
-    dispatch(parse_resume_task, str(run.id))
+    # allow_inline: with no worker deployed this would otherwise never run.
+    # A recruiter triggered it and is waiting on the result, so doing it in the
+    # request is the honest trade -- a slow response beats a silent no-op.
+    dispatch(parse_resume_task, str(run.id), allow_inline=True)
     return run
 
 
@@ -93,7 +96,7 @@ def evaluate_application(
         resource_id=str(evaluation.id),
     )
     db.commit()
-    dispatch(evaluate_application_task, str(evaluation.id))
+    dispatch(evaluate_application_task, str(evaluation.id), allow_inline=True)
     return evaluation
 
 

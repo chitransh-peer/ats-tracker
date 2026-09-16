@@ -85,6 +85,13 @@ def apply_to_job(
 
     # Kick off AI review automatically so every careers-page applicant gets a score.
     # Imported here to avoid a service<->worker import cycle at module load.
+    #
+    # Deliberately NOT allow_inline, unlike the recruiter-triggered endpoints in
+    # api/v1/routes/ai.py. A member of staff will wait half a minute for a score
+    # they asked for; a candidate submitting an application will not, and a form
+    # that hangs on an LLM call loses applicants and invites double submissions. Where
+    # no worker is deployed these stay unscored, and a recruiter can score them
+    # by hand from the application.
     from app.workers.dispatch import dispatch
     from app.workers.tasks.ai import evaluate_application_task, parse_resume_task
 
