@@ -57,4 +57,4 @@ jobs:
             --set-env-vars=NEXT_PUBLIC_API_URL=${{ env.BACKEND_URL }}
 
       - name: Show Output URL
-        run: echo "Frontend deployed to ${{ steps.deploy.outputs.url }}"
+        run: echo "Frontend succesfully deployed to ${{ steps.deploy.outputs.url }}"
