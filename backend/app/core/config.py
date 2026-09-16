@@ -87,6 +87,15 @@ class Settings(BaseSettings):
     default_super_admin_email: str = "admin@ats-tracker.local"
     default_super_admin_password: str = "change-me"
 
+    # Break-glass recovery. The seed script only ever *creates* the Super Admin,
+    # so an account left over from an earlier deploy keeps whatever password it
+    # was created with — and on a managed runtime like Cloud Run there is no
+    # shell to go and fix that from. Setting this to true makes the next seed
+    # run reset the Super Admin's password to default_super_admin_password and
+    # reactivate the account. Turn it off again once you are back in: while it
+    # is true, every container start resets that password.
+    force_super_admin_password_reset: bool = False
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]

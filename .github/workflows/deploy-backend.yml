@@ -75,7 +75,7 @@ jobs:
             --port=8000
             --timeout=300
             --add-cloudsql-instances=peer-website-504716:us-central1:ats-db-instance
-            --set-env-vars=^##^APP_ENV=production##CORS_ORIGINS=${{ env.FRONTEND_URL }}##APP_BASE_URL=${{ env.FRONTEND_URL }}##JWT_SECRET=${{ secrets.JWT_SECRET }}##SECRET_KEY=${{ secrets.JWT_SECRET }}##DEFAULT_SUPER_ADMIN_EMAIL=${{ secrets.SUPER_ADMIN_EMAIL }}##DEFAULT_SUPER_ADMIN_PASSWORD=${{ secrets.SUPER_ADMIN_PASSWORD }}##DATABASE_URL=postgresql+psycopg://ats:${{ secrets.DB_PASSWORD }}@/ats_tracker?host=/cloudsql/peer-website-504716:us-central1:ats-db-instance
+            --set-env-vars=^##^APP_ENV=production##CORS_ORIGINS=${{ env.FRONTEND_URL }}##APP_BASE_URL=${{ env.FRONTEND_URL }}##JWT_SECRET=${{ secrets.JWT_SECRET }}##SECRET_KEY=${{ secrets.JWT_SECRET }}##DEFAULT_SUPER_ADMIN_EMAIL=${{ secrets.SUPER_ADMIN_EMAIL }}##DEFAULT_SUPER_ADMIN_PASSWORD=${{ secrets.SUPER_ADMIN_PASSWORD }}##FORCE_SUPER_ADMIN_PASSWORD_RESET=${{ vars.FORCE_SUPER_ADMIN_PASSWORD_RESET || 'false' }}##DATABASE_URL=postgresql+psycopg://ats:${{ secrets.DB_PASSWORD }}@/ats_tracker?host=/cloudsql/peer-website-504716:us-central1:ats-db-instance
 
       - name: Show Output URL
         run: echo "Backend deployed to ${{ steps.deploy.outputs.url }}"

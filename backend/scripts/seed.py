@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.core.enums import RoleName
 from app.db.models.organization import Organization, OrganizationSettings
+from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.services.pipeline.service import seed_default_stage_template
 from app.services.roles.service import seed_roles_and_permissions
@@ -46,8 +47,19 @@ def run() -> None:
                 role_names=[RoleName.SUPER_ADMIN.value],
             )
             print(f"Created super admin user '{settings.default_super_admin_email}'")
+        elif settings.force_super_admin_password_reset:
+            existing_admin.hashed_password = hash_password(settings.default_super_admin_password)
+            existing_admin.is_active = True
+            db.commit()
+            print(
+                f"Reset password for super admin '{settings.default_super_admin_email}' "
+                "(FORCE_SUPER_ADMIN_PASSWORD_RESET is set — unset it once you can sign in)"
+            )
         else:
-            print("Super admin user already exists")
+            print(
+                f"Super admin user '{settings.default_super_admin_email}' already exists "
+                "— password left unchanged"
+            )
     finally:
         db.close()
 
