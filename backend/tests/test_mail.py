@@ -179,3 +179,47 @@ def test_email_status_is_readable_by_any_authenticated_user(client, make_user, a
 
 def test_email_status_rejects_anonymous_callers(client):
     assert client.get("/api/v1/settings/email-status").status_code == 401
+
+
+def test_invite_still_delivers_mail_when_no_broker_is_configured(
+    client, make_user, auth_headers, mail_settings, monkeypatch
+):
+    """The deployed stack has no Redis and no worker process.
+
+    Without a fallback, `actor.send(...)` raises and the invite request fails
+    *after* the account has already been created -- or, with a broker but no
+    worker, succeeds into a queue nobody reads. Either way the temporary
+    password never reaches the person it was generated for.
+    """
+    # The localhost default is what "no broker" looks like on a managed runtime.
+    monkeypatch.setattr(mail_settings, "redis_url", "redis://localhost:6379/0", raising=False)
+
+    sent: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "app.workers.tasks.mail.send_email",
+        lambda **kwargs: sent.append((kwargs["to"], kwargs["subject"])) or True,
+    )
+
+    # Fail loudly if anything tries to reach the queue.
+    def _explode(*_args, **_kwargs):
+        raise AssertionError("should not enqueue when no broker is configured")
+
+    monkeypatch.setattr("app.workers.tasks.mail.send_email_task.send", _explode)
+
+    admin, password = make_user(role_names=[RoleName.ADMIN.value])
+    headers = auth_headers(admin.email, password)
+
+    response = client.post(
+        "/api/v1/users",
+        json={
+            "email": "no-broker-invitee@example.com",
+            "full_name": "No Broker Invitee",
+            "role_name": RoleName.RECRUITER.value,
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 201
+    assert sent == [("no-broker-invitee@example.com", sent[0][1])]
+    # The credential itself must be in the message that went out.
+    assert response.json()["temporary_password"]

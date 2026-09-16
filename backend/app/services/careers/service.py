@@ -85,14 +85,15 @@ def apply_to_job(
 
     # Kick off AI review automatically so every careers-page applicant gets a score.
     # Imported here to avoid a service<->worker import cycle at module load.
+    from app.workers.dispatch import dispatch
     from app.workers.tasks.ai import evaluate_application_task, parse_resume_task
 
     evaluation = create_pending_evaluation(db, organization_id=organization_id, application_id=application.id, actor_id=None)
     if document is not None:
         run = create_pending_run(db, organization_id=organization_id, candidate_id=candidate.id, document_id=document.id)
         # Parse first, then chain evaluation once the résumé text is available.
-        parse_resume_task.send(str(run.id), str(evaluation.id))
+        dispatch(parse_resume_task, str(run.id), str(evaluation.id))
     else:
-        evaluate_application_task.send(str(evaluation.id))
+        dispatch(evaluate_application_task, str(evaluation.id))
 
     return application, candidate

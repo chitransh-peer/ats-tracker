@@ -26,6 +26,7 @@ from app.services.hotlist.spreadsheet import (
     build_hotlist_workbook,
     build_recipient_template_workbook,
 )
+from app.workers.dispatch import dispatch
 from app.workers.tasks.mail import send_hotlist_task
 
 router = APIRouter(prefix="/hotlists", tags=["hotlists"])
@@ -343,6 +344,6 @@ def send_hotlist(
 
     # Handed to the worker: a 200-address batch must not block the request, and
     # each address needs its own recorded outcome.
-    send_hotlist_task.send(str(send.id))
+    dispatch(send_hotlist_task, str(send.id))
     db.refresh(send)
     return send

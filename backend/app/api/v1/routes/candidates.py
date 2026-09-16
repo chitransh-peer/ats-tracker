@@ -24,6 +24,7 @@ from app.services.applications.service import list_applications
 from app.services.audit.service import record as record_audit
 from app.services.candidates import service as candidate_service
 from app.services.communication import service as communication_service
+from app.workers.dispatch import dispatch
 from app.workers.tasks.mail import send_outbound_message_task
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
@@ -258,5 +259,5 @@ def send_message(
     )
     # The row is always written first, so the outreach is recorded even if
     # delivery later fails; the worker flips status to sent/failed.
-    send_outbound_message_task.send(str(message.id))
+    dispatch(send_outbound_message_task, str(message.id))
     return message

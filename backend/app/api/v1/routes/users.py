@@ -14,6 +14,7 @@ from app.services.auth import service as auth_service
 from app.services.mail import messages as mail_messages
 from app.services.organizations import service as organization_service
 from app.services.users import service as user_service
+from app.workers.dispatch import dispatch
 from app.workers.tasks.mail import send_email_task
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -84,7 +85,9 @@ def invite_user(
         role_name=payload.role_name,
         expires_at=user.temp_password_expires_at,
     )
-    send_email_task.send(user.email, subject, text_body, html_body)
+    # allow_inline: this mail carries the only copy of the temporary password.
+    # If it does not go out, the invitation is useless, so it is worth the wait.
+    dispatch(send_email_task, user.email, subject, text_body, html_body, allow_inline=True)
 
     return InviteUserResponse(
         email=user.email,

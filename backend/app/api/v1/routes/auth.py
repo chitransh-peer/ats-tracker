@@ -25,6 +25,7 @@ from app.services.audit.service import record as record_audit
 from app.services.auth import service as auth_service
 from app.services.mail import messages as mail_messages
 from app.services.users.service import get_user_by_id, role_names_for_user
+from app.workers.dispatch import dispatch
 from app.workers.tasks.mail import send_email_task
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -65,7 +66,8 @@ def forgot_password(
     # used to probe which addresses have accounts.
     if raw_token is not None:
         subject, text_body, html_body = mail_messages.password_reset(token=raw_token, expires_in_minutes=expires_in_minutes)
-        send_email_task.send(payload.email, subject, text_body, html_body)
+        # allow_inline: without this mail the user cannot reset their password.
+        dispatch(send_email_task, payload.email, subject, text_body, html_body, allow_inline=True)
 
     # Never hand the token back in production, whatever the flag says.
     expose = settings.expose_password_reset_token and settings.app_env != "production"
@@ -110,7 +112,7 @@ def change_password(
         subject, text_body, html_body = mail_messages.account_created(
             full_name=user.full_name, email=user.email, role_names=role_names_for_user(user)
         )
-        send_email_task.send(user.email, subject, text_body, html_body)
+        dispatch(send_email_task, user.email, subject, text_body, html_body, allow_inline=True)
 
     access_token, refresh_token = auth_service.issue_tokens_for(db, user)
     return TokenPair(access_token=access_token, refresh_token=refresh_token)

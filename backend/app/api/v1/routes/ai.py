@@ -18,6 +18,7 @@ from app.schemas.auth import CurrentUser
 from app.services.ai import evaluation as evaluation_service
 from app.services.ai import resume_parsing as resume_parsing_service
 from app.services.audit.service import record as record_audit
+from app.workers.dispatch import dispatch
 from app.workers.tasks.ai import evaluate_application_task, parse_resume_task
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -61,7 +62,7 @@ def parse_resume(
         resource_id=str(run.id),
     )
     db.commit()
-    parse_resume_task.send(str(run.id))
+    dispatch(parse_resume_task, str(run.id))
     return run
 
 
@@ -92,7 +93,7 @@ def evaluate_application(
         resource_id=str(evaluation.id),
     )
     db.commit()
-    evaluate_application_task.send(str(evaluation.id))
+    dispatch(evaluate_application_task, str(evaluation.id))
     return evaluation
 
 
