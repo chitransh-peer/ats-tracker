@@ -1,0 +1,121 @@
+name: GCP Diagnostics
+
+# Run by hand from the Actions tab. Read-only.
+#
+# Nobody on this project has interactive access to the GCP project, and a
+# GitHub secret cannot be read back out, so the deploy service account is the
+# only thing that can answer questions about the running infrastructure. This
+# borrows it for the read-only half: what the service is configured with, what
+# it has been logging, and whether the database is being backed up.
+#
+# It deliberately never prints a value that could be a credential -- environment
+# variables are reported by name only. GitHub masks registered secrets in logs,
+# but anything set directly on the service is not registered here and would not
+# be masked, so the safe rule is to print names and never values.
+
+on:
+  workflow_dispatch:
+    inputs:
+      log_severity:
+        description: 'Minimum log severity to fetch'
+        required: false
+        default: 'WARNING'
+        type: choice
+        options:
+          - DEFAULT
+          - INFO
+          - WARNING
+          - ERROR
+      log_limit:
+        description: 'How many log entries to fetch'
+        required: false
+        default: '50'
+
+env:
+  PROJECT_ID: "peer-website-504716"
+  REGION: "us-central1"
+  SERVICE_NAME: "ats-backend"
+  SQL_INSTANCE: "ats-db-instance"
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      # Each step is allowed to fail on its own: the deploy service account was
+      # provisioned to deploy, not to inspect, so some of these may be denied.
+      # A denial is itself a useful answer, and must not stop the rest.
+      - name: Service configuration (variable names only, never values)
+        continue-on-error: true
+        run: |
+          echo "## Cloud Run service" >> "$GITHUB_STEP_SUMMARY"
+          gcloud run services describe "$SERVICE_NAME" --region "$REGION" --project "$PROJECT_ID" \
+            --format="value(status.url)" | sed 's/^/URL: /' | tee -a "$GITHUB_STEP_SUMMARY"
+          gcloud run services describe "$SERVICE_NAME" --region "$REGION" --project "$PROJECT_ID" \
+            --format="value(spec.template.spec.containers[0].resources.limits)" \
+            | sed 's/^/Resources: /' | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Environment variables set (names only):" | tee -a "$GITHUB_STEP_SUMMARY"
+          gcloud run services describe "$SERVICE_NAME" --region "$REGION" --project "$PROJECT_ID" \
+            --format="value(spec.template.spec.containers[0].env[].name)" \
+            | tr ';' '\n' | sed 's/^/  - /' | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Cloud SQL backup configuration
+        continue-on-error: true
+        run: |
+          echo "## Cloud SQL backups" >> "$GITHUB_STEP_SUMMARY"
+          # The one thing on this list that cannot be fixed after the fact.
+          gcloud sql instances describe "$SQL_INSTANCE" --project "$PROJECT_ID" \
+            --format="yaml(settings.backupConfiguration, settings.tier, settings.dataDiskSizeGb, state)" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Recent logs
+        continue-on-error: true
+        run: |
+          echo "## Recent ${{ inputs.log_severity }}+ logs" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          gcloud logging read \
+            "resource.type=cloud_run_revision AND resource.labels.service_name=$SERVICE_NAME AND severity>=${{ inputs.log_severity }}" \
+            --project "$PROJECT_ID" --limit "${{ inputs.log_limit }}" --freshness=7d \
+            --format="value(timestamp, severity, textPayload, jsonPayload.message)" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Startup logs from the most recent boot
+        continue-on-error: true
+        run: |
+          echo "## Startup (migrations and seeding)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          gcloud logging read \
+            "resource.type=cloud_run_revision AND resource.labels.service_name=$SERVICE_NAME AND textPayload:\"[startup]\"" \
+            --project "$PROJECT_ID" --limit 30 --freshness=7d \
+            --format="value(timestamp, textPayload)" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Storage buckets
+        continue-on-error: true
+        run: |
+          echo "## Buckets visible to this service account" >> "$GITHUB_STEP_SUMMARY"
+          gcloud storage buckets list --project "$PROJECT_ID" --format="value(name, location)" \
+            | tee -a "$GITHUB_STEP_SUMMARY" || echo "(no permission, or none exist)" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: What this service account is allowed to do
+        continue-on-error: true
+        run: |
+          echo "## Service account roles" >> "$GITHUB_STEP_SUMMARY"
+          # Tells us up front whether creating a bucket or reading logs is even
+          # possible, rather than discovering it through a failure later.
+          ACCOUNT=$(gcloud config get-value account 2>/dev/null)
+          echo "Acting as: $ACCOUNT" | tee -a "$GITHUB_STEP_SUMMARY"
+          gcloud projects get-iam-policy "$PROJECT_ID" \
+            --flatten="bindings[].members" \
+            --filter="bindings.members:$ACCOUNT" \
+            --format="value(bindings.role)" \
+            | sed 's/^/  - /' | tee -a "$GITHUB_STEP_SUMMARY"
