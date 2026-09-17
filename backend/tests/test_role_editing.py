@@ -92,3 +92,28 @@ def test_super_admin_role_is_immutable(client, make_user, auth_headers):
         headers=sa_headers,
     )
     assert resp.status_code == 422
+
+
+def test_revoked_permissions_survive_a_restart(client, db, make_user, auth_headers):
+    """The entrypoint re-seeds on every container start, and Cloud Run cold
+    starts constantly. If seeding re-applied the shipped defaults it would undo
+    a Super Admin's edits behind their back, hours after they made them."""
+    from app.services.roles.service import get_role_by_name, seed_roles_and_permissions, set_role_permissions
+
+    role = get_role_by_name(db, RoleName.RECRUITER.value)
+    original = sorted((rp.permission.resource, rp.permission.action) for rp in role.role_permissions)
+    assert original, "expected the recruiter role to hold some permissions by default"
+
+    revoked = original[0]
+    set_role_permissions(db, role, [g for g in original if g != revoked])
+
+    # Exactly what happens on the next cold start.
+    seed_roles_and_permissions(db)
+    db.expire_all()
+
+    role = get_role_by_name(db, RoleName.RECRUITER.value)
+    current = {(rp.permission.resource, rp.permission.action) for rp in role.role_permissions}
+    assert revoked not in current, f"{revoked} came back after a re-seed"
+
+    # Restore so the shared dev database is left as it was found.
+    set_role_permissions(db, role, original)

@@ -7,17 +7,9 @@
 # on startup, rather than from a developer's laptop.
 set -e
 
-echo "[entrypoint] Applying database migrations..."
-alembic upgrade head
-
-# Idempotent: scripts/seed.py creates the organization and the Super Admin only
-# when they are missing, so this is a no-op on every boot after the first.
-# Deliberately non-fatal — a seeding problem should be visible in the logs, not
-# a crash-loop that takes the whole API down.
-echo "[entrypoint] Seeding baseline data..."
-if ! python -m scripts.seed; then
-    echo "[entrypoint] WARNING: seeding failed; continuing startup." >&2
-fi
+# Migrations and seeding run under a Postgres advisory lock so that instances
+# starting at the same moment cannot race each other -- see scripts/startup.py.
+python -m scripts.startup
 
 echo "[entrypoint] Starting API on port ${PORT:-8000}..."
 # --proxy-headers: behind Cloud Run's front end, the client address only

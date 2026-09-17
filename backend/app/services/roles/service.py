@@ -7,15 +7,42 @@ from app.core.permissions import ROLE_PERMISSIONS
 from app.db.models.role import Permission, Role, RolePermission
 
 
-def seed_roles_and_permissions(db: Session) -> None:
+def seed_roles_and_permissions(db: Session, *, reset_existing_roles: bool = False) -> None:
+    """Ensure the permission catalogue exists and bootstrap any missing role.
+
+    Default grants are applied only to roles this call actually creates. A role
+    that is already there is left exactly as it is, because a Super Admin can
+    edit role permissions from the UI, and this runs on every container start --
+    re-applying the defaults would silently restore any permission they had
+    deliberately revoked, on the next cold start.
+
+    Pass reset_existing_roles=True to put every role back to its shipped
+    defaults, discarding those edits. Nothing does that automatically.
+    """
     existing_permissions = {p.key: p for p in db.scalars(select(Permission)).all()}
+
+    # The catalogue is maintained unconditionally: the role editor lists every
+    # known permission, so a release that introduces one must be able to offer
+    # it even though no role is granted it yet.
+    for grants in ROLE_PERMISSIONS.values():
+        for resource, action in grants:
+            key = f"{resource.value}:{action.value}"
+            if key not in existing_permissions:
+                permission = Permission(resource=resource.value, action=action.value)
+                db.add(permission)
+                db.flush()
+                existing_permissions[key] = permission
 
     for role_enum, grants in ROLE_PERMISSIONS.items():
         role = db.scalar(select(Role).where(Role.name == role_enum.value))
-        if role is None:
+        is_new = role is None
+        if is_new:
             role = Role(name=role_enum.value, display_name=role_enum.value.replace("_", " ").title())
             db.add(role)
             db.flush()
+
+        if not is_new and not reset_existing_roles:
+            continue
 
         granted_keys = {f"{resource.value}:{action.value}" for resource, action in grants}
         existing_role_permission_keys = {
@@ -28,14 +55,7 @@ def seed_roles_and_permissions(db: Session) -> None:
         }
 
         for key in granted_keys - existing_role_permission_keys:
-            permission = existing_permissions.get(key)
-            if permission is None:
-                resource, action = key.split(":")
-                permission = Permission(resource=resource, action=action)
-                db.add(permission)
-                db.flush()
-                existing_permissions[key] = permission
-            db.add(RolePermission(role_id=role.id, permission_id=permission.id))
+            db.add(RolePermission(role_id=role.id, permission_id=existing_permissions[key].id))
 
     db.commit()
 
