@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 14
 
+    # "s3" talks to S3 or anything S3-compatible (MinIO locally) using the
+    # access/secret pair below. "gcs" talks to Google Cloud Storage as whatever
+    # service account the process is already running as, so there is no key to
+    # configure, leak or rotate -- the right choice on Cloud Run, where the
+    # container has an identity of its own.
+    storage_backend: str = "s3"
     storage_endpoint_url: str = "http://localhost:9000"
     storage_bucket: str = "ats-tracker"
     storage_access_key: str = ""

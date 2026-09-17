@@ -73,9 +73,17 @@ def get_system_status(
             settings.openrouter_model or None if settings.ai_provider == "openrouter" else settings.ollama_model or None
         ),
         ai_credentials_set=(bool(settings.openrouter_api_key) if settings.ai_provider == "openrouter" else True),
+        storage_backend=settings.storage_backend,
         storage_endpoint_url=settings.storage_endpoint_url or None,
         storage_bucket=settings.storage_bucket,
-        storage_credentials_set=bool(settings.storage_access_key and settings.storage_secret_key),
+        # On the gcs backend there is no key pair by design: the container
+        # authenticates as its own service account, so "configured" means the
+        # backend is selected, not that a secret was supplied.
+        storage_credentials_set=(
+            True
+            if settings.storage_backend.lower() == "gcs"
+            else bool(settings.storage_access_key and settings.storage_secret_key)
+        ),
         # The default points at a localhost Redis that does not exist on a
         # managed runtime, so treat that as "not configured" rather than as a
         # real broker -- it is the difference between queued work running and

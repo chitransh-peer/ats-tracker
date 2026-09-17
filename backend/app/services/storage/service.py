@@ -59,13 +59,37 @@ def build_storage_key(candidate_id: uuid.UUID, file_name: str) -> str:
     return f"candidates/{candidate_id}/{uuid.uuid4()}-{file_name}"
 
 
+@lru_cache
+def get_gcs_bucket():
+    """The GCS bucket handle, authenticated as the ambient service account.
+
+    google-cloud-storage resolves Application Default Credentials, which on
+    Cloud Run means the identity attached to the service. No key material is
+    involved at any point, so there is nothing here to put in a secret store.
+    """
+    from google.cloud import storage as gcs
+
+    return gcs.Client().bucket(get_settings().storage_bucket)
+
+
+def _use_gcs() -> bool:
+    return get_settings().storage_backend.lower() == "gcs"
+
+
 def upload_bytes(key: str, data: bytes, content_type: str) -> None:
     settings = get_settings()
+    if _use_gcs():
+        get_gcs_bucket().blob(key).upload_from_string(data, content_type=content_type)
+        return
+
     ensure_bucket_exists()
     get_client().put_object(Bucket=settings.storage_bucket, Key=key, Body=data, ContentType=content_type)
 
 
 def download_bytes(key: str) -> bytes:
     settings = get_settings()
+    if _use_gcs():
+        return get_gcs_bucket().blob(key).download_as_bytes()
+
     response = get_client().get_object(Bucket=settings.storage_bucket, Key=key)
     return response["Body"].read()

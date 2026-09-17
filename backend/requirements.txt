@@ -12,6 +12,8 @@ python-multipart==0.0.20
 redis==5.2.1
 dramatiq[redis]==1.17.1
 boto3==1.35.97
+# Native GCS access using the container's own service account (no key material).
+google-cloud-storage==2.19.0
 openpyxl==3.1.5
 pytest==8.3.4
 pytest-asyncio==0.25.1

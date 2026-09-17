@@ -55,6 +55,7 @@ class SystemStatusRead(BaseModel):
     ai_model: str | None
     ai_credentials_set: bool
 
+    storage_backend: str
     storage_endpoint_url: str | None
     storage_bucket: str
     storage_credentials_set: bool
