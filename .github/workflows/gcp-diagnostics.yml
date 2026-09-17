@@ -83,7 +83,7 @@ jobs:
           gcloud logging read \
             "resource.type=cloud_run_revision AND resource.labels.service_name=$SERVICE_NAME AND severity>=${{ inputs.log_severity }}" \
             --project "$PROJECT_ID" --limit "${{ inputs.log_limit }}" --freshness=7d \
-            --format="value(timestamp, severity, textPayload, jsonPayload.message)" \
+            --format="table[no-heading](timestamp.date('%Y-%m-%d %H:%M:%S'), severity, textPayload.yesno(no='-'), jsonPayload.message.yesno(no='-'), protoPayload.status.message.yesno(no='-'))" \
             | tee -a "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 

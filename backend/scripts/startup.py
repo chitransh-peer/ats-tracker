@@ -21,6 +21,7 @@ from sqlalchemy import text
 
 from alembic import command
 from alembic.config import Config
+from app.core.config import get_settings
 from app.db.session import engine
 
 # Any stable 64-bit value; it just has to be one no other advisory lock in this
@@ -28,14 +29,51 @@ from app.db.session import engine
 _LOCK_KEY = 8_014_552_310_771_004
 
 
+def _pending_work(connection, config: "Config") -> bool:
+    """Whether this boot has anything to do, answered with one cheap query.
+
+    The common case by far is an instance starting on a schema that is already
+    current. Taking the advisory lock and running alembic anyway costs seconds
+    of startup, and on a runtime that scales from zero that lands directly on
+    user-visible latency -- or, when several instances come up at once, on a
+    queue of them all waiting behind the same lock while requests time out.
+    """
+    from alembic.runtime.migration import MigrationContext
+    from alembic.script import ScriptDirectory
+
+    if (
+        MigrationContext.configure(connection).get_current_revision()
+        != ScriptDirectory.from_config(config).get_current_head()
+    ):
+        return True
+
+    # Schema is current, so the only remaining reason to act is a database that
+    # has not been seeded yet, or an explicit request to reset the admin.
+    if get_settings().force_super_admin_password_reset:
+        return True
+
+    return not connection.execute(text("SELECT EXISTS (SELECT 1 FROM users LIMIT 1)")).scalar()
+
+
 def run() -> None:
+    config = Config("alembic.ini")
+
     with engine.connect() as connection:
+        try:
+            if not _pending_work(connection, config):
+                print("[startup] Schema is current and the database is seeded; nothing to do.", flush=True)
+                return
+        except Exception:
+            # A first-ever boot has no alembic_version or users table to read.
+            # Anything unexpected here should fall through to the full path
+            # rather than skip setup on a database that may genuinely need it.
+            print("[startup] Could not determine migration state; running full setup.", flush=True)
+
         print("[startup] Waiting for the migration lock...", flush=True)
         connection.execute(text("SELECT pg_advisory_lock(:key)"), {"key": _LOCK_KEY})
         connection.commit()
         try:
             print("[startup] Applying database migrations...", flush=True)
-            config = Config("alembic.ini")
             command.upgrade(config, "head")
 
             print("[startup] Seeding baseline data...", flush=True)
