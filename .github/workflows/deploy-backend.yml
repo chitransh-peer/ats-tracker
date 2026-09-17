@@ -155,6 +155,8 @@ jobs:
             --allow-unauthenticated
             --port=8000
             --timeout=300
+            --cpu=1
+            --memory=1Gi
             --add-cloudsql-instances=peer-website-504716:us-central1:ats-db-instance
             --update-env-vars=^##^${{ steps.envvars.outputs.pairs }}
 
