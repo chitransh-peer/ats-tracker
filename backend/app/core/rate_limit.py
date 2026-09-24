@@ -23,4 +23,14 @@ limiter = Limiter(
     key_func=get_remote_address,
     storage_uri=storage_uri,
     default_limits=[],
+    # Fail open. Without this, a Redis that is configured but unreachable makes
+    # the limiter raise, and because the limit is checked before the endpoint
+    # body, the failure surfaces as a 500 on /auth/login -- nobody can sign in
+    # at all because the thing counting sign-in attempts is down.
+    #
+    # The trade is deliberate: while storage is unavailable the limit stops
+    # being enforced, so brute-force protection lapses until it recovers. An
+    # outage of the whole login flow is the worse of the two, and slowapi logs
+    # the swallowed error either way.
+    swallow_errors=True,
 )
