@@ -221,6 +221,43 @@ async function requestPage<T>(
   return { data, total: totalHeader ? Number(totalHeader) : data.length };
 }
 
+/**
+ * Fetch a file from an authenticated endpoint and hand it to the browser as a
+ * download.
+ *
+ * Goes through `fetch` rather than an `<a href>` because these endpoints need
+ * the Authorization header — a plain link would arrive unauthenticated and be
+ * bounced to the login page.
+ */
+export async function downloadFile(path: string, fallbackFileName: string): Promise<void> {
+  const response = await fetch(`${API_BASE}${path}`, { headers: authHeaders() });
+  if (!response.ok) {
+    throw new ApiError(response.status, null, `Could not download the file (${response.status}).`);
+  }
+
+  // Prefer the server's filename. RFC 6266 puts the accurate, possibly
+  // non-ASCII one in filename*, and a plain ASCII fallback in filename.
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const plain = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+  const fileName = encoded ? decodeURIComponent(encoded) : (plain ?? fallbackFileName);
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    // Revoking immediately can cancel the download in some browsers; a tick is
+    // enough for the click to have been handed off.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+}
+
 export const apiClient = {
   get: <T>(path: string) => request<T>(path, { method: "GET" }),
   getPage: <T>(path: string) => requestPage<T>(path),

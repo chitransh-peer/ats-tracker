@@ -12,6 +12,16 @@ export interface CurrentUserProfile {
   updated_at: string;
 }
 
+export interface CandidateDocument {
+  id: string;
+  document_type: string;
+  file_name: string;
+  content_type: string;
+  size_bytes: number;
+  uploaded_by: string | null;
+  created_at: string;
+}
+
 export interface InvitedUser {
   email: string;
   full_name: string;

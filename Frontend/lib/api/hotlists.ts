@@ -1,4 +1,4 @@
-import { API_BASE, apiClient, authHeaders } from "./client";
+import { apiClient, downloadFile } from "./client";
 import type {
   Hotlist,
   HotlistInput,
@@ -88,38 +88,10 @@ export function sendHotlist(hotlistId: string) {
   return apiClient.post<HotlistSend>(`/hotlists/${hotlistId}/send`);
 }
 
-/**
- * Download a generated .xlsx.
- *
- * Goes through `fetch` rather than an `<a href>` because the endpoint needs the
- * Authorization header — a plain link would arrive unauthenticated.
- */
-export async function downloadWorkbook(path: string, fallbackFileName: string): Promise<void> {
-  const response = await fetch(`${API_BASE}${path}`, { headers: authHeaders() });
-  if (!response.ok) {
-    throw new Error(`Download failed with status ${response.status}`);
-  }
-
-  // Prefer the server's filename when it sends one.
-  const disposition = response.headers.get("Content-Disposition") ?? "";
-  const match = disposition.match(/filename="?([^"]+)"?/);
-  const fileName = match?.[1] ?? fallbackFileName;
-
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
 export function exportHotlist(hotlistId: string, name: string) {
-  return downloadWorkbook(`/hotlists/${hotlistId}/export`, `${name || "hotlist"}.xlsx`);
+  return downloadFile(`/hotlists/${hotlistId}/export`, `${name || "hotlist"}.xlsx`);
 }
 
 export function downloadRecipientTemplate() {
-  return downloadWorkbook("/hotlists/recipient-template", "hotlist-recipients-template.xlsx");
+  return downloadFile("/hotlists/recipient-template", "hotlist-recipients-template.xlsx");
 }

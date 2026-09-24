@@ -80,3 +80,11 @@ export function useSendCandidateMessage(candidateId: string) {
       queryClient.invalidateQueries({ queryKey: ["candidates", candidateId, "messages"] }),
   });
 }
+
+export function useCandidateDocuments(candidateId: string) {
+  return useQuery({
+    queryKey: ["candidates", candidateId, "documents"],
+    queryFn: () => candidatesApi.listCandidateDocuments(candidateId),
+    enabled: Boolean(candidateId),
+  });
+}

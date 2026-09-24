@@ -1,10 +1,11 @@
 import uuid
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Response, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session, require_permission
+from app.api.v1.routes._documents import document_response
 from app.core.enums import AuditAction, PermissionAction, PermissionResource
 from app.schemas.application import ApplicationRead
 from app.schemas.auth import CurrentUser
@@ -261,6 +262,22 @@ def list_job_documents(
 ) -> list[JobDocumentRead]:
     job = job_service.get_job(db, current_user.organization_id, job_id, viewer=current_user)
     return job_service.list_documents(db, job)
+
+
+@router.get("/{job_id}/documents/{document_id}/download")
+def download_job_document(
+    job_id: uuid.UUID,
+    document_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_permission(PermissionResource.JOB, PermissionAction.READ)),
+    db: Session = Depends(get_db_session),
+) -> Response:
+    job = job_service.get_job(db, current_user.organization_id, job_id)
+    document = job_service.get_document(db, job, document_id)
+    return document_response(
+        storage_key=document.storage_key,
+        file_name=document.file_name,
+        content_type=document.content_type,
+    )
 
 
 @router.post("/{job_id}/documents", response_model=JobDocumentRead, status_code=201)

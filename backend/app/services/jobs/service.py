@@ -276,6 +276,20 @@ def add_document(
     return document
 
 
+def get_document(db: Session, job: Job, document_id: uuid.UUID) -> JobDocument:
+    """Fetch one document, scoped to the job it belongs to, so a document id
+    cannot be used to reach a file hanging off a record the caller cannot see."""
+    document = db.scalar(
+        select(JobDocument).where(
+            JobDocument.id == document_id,
+            JobDocument.job_id == job.id,
+        )
+    )
+    if document is None:
+        raise NotFoundError("Document not found")
+    return document
+
+
 def list_documents(db: Session, job: Job) -> list[JobDocument]:
     return list(
         db.scalars(select(JobDocument).where(JobDocument.job_id == job.id).order_by(JobDocument.created_at.desc())).all()

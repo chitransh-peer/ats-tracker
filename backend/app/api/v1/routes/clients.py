@@ -1,9 +1,10 @@
 import uuid
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session, require_permission
+from app.api.v1.routes._documents import document_response
 from app.core.enums import PermissionAction, PermissionResource
 from app.schemas.auth import CurrentUser
 from app.schemas.client import (
@@ -191,6 +192,22 @@ def list_client_documents(
 ) -> list[ClientDocumentRead]:
     client = client_service.get_client(db, current_user.organization_id, client_id)
     return client_service.list_documents(db, client)
+
+
+@router.get("/{client_id}/documents/{document_id}/download")
+def download_client_document(
+    client_id: uuid.UUID,
+    document_id: uuid.UUID,
+    current_user: CurrentUser = Depends(_READ),
+    db: Session = Depends(get_db_session),
+) -> Response:
+    client = client_service.get_client(db, current_user.organization_id, client_id)
+    document = client_service.get_document(db, client, document_id)
+    return document_response(
+        storage_key=document.storage_key,
+        file_name=document.file_name,
+        content_type=document.content_type,
+    )
 
 
 @router.post("/{client_id}/documents", response_model=ClientDocumentRead, status_code=201)

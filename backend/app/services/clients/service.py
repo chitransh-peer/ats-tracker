@@ -174,6 +174,20 @@ def add_document(
     return document
 
 
+def get_document(db: Session, client: Client, document_id: uuid.UUID) -> ClientDocument:
+    """Fetch one document, scoped to the client it belongs to, so a document id
+    cannot be used to reach a file hanging off a record the caller cannot see."""
+    document = db.scalar(
+        select(ClientDocument).where(
+            ClientDocument.id == document_id,
+            ClientDocument.client_id == client.id,
+        )
+    )
+    if document is None:
+        raise NotFoundError("Document not found")
+    return document
+
+
 def list_documents(db: Session, client: Client) -> list[ClientDocument]:
     return list(
         db.scalars(

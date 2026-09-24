@@ -1,5 +1,6 @@
-import { apiClient } from "./client";
+import { apiClient, downloadFile } from "./client";
 import type {
+  CandidateDocument,
   Candidate,
   CandidateCreateInput,
   CandidateNote,
@@ -86,4 +87,15 @@ export function listCandidateMessages(candidateId: string) {
 
 export function sendCandidateMessage(candidateId: string, input: SendMessageInput) {
   return apiClient.post<OutboundMessage>(`/candidates/${candidateId}/messages`, input);
+}
+
+export function listCandidateDocuments(candidateId: string) {
+  return apiClient.get<CandidateDocument[]>(`/candidates/${candidateId}/documents`);
+}
+
+export function downloadCandidateDocument(candidateId: string, document: CandidateDocument) {
+  return downloadFile(
+    `/candidates/${candidateId}/documents/${document.id}/download`,
+    document.file_name,
+  );
 }

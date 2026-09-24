@@ -175,6 +175,20 @@ def add_document(
     return document
 
 
+def get_document(db: Session, vendor: Vendor, document_id: uuid.UUID) -> VendorDocument:
+    """Fetch one document, scoped to the vendor it belongs to, so a document id
+    cannot be used to reach a file hanging off a record the caller cannot see."""
+    document = db.scalar(
+        select(VendorDocument).where(
+            VendorDocument.id == document_id,
+            VendorDocument.vendor_id == vendor.id,
+        )
+    )
+    if document is None:
+        raise NotFoundError("Document not found")
+    return document
+
+
 def list_documents(db: Session, vendor: Vendor) -> list[VendorDocument]:
     return list(
         db.scalars(

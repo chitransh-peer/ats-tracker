@@ -204,6 +204,34 @@ def set_tags(db: Session, candidate: Candidate, tags: list[str]) -> Candidate:
     return candidate
 
 
+def list_documents(db: Session, candidate: Candidate) -> list[CandidateDocument]:
+    return list(
+        db.scalars(
+            select(CandidateDocument)
+            .where(CandidateDocument.candidate_id == candidate.id)
+            .order_by(CandidateDocument.created_at.desc())
+        )
+    )
+
+
+def get_document(db: Session, candidate: Candidate, document_id: uuid.UUID) -> CandidateDocument:
+    """Fetch one document, scoped to the candidate it belongs to.
+
+    Scoping by candidate rather than by id alone is what stops a document id
+    from one candidate being used to read a file attached to another, whose
+    record the caller may have no right to see.
+    """
+    document = db.scalar(
+        select(CandidateDocument).where(
+            CandidateDocument.id == document_id,
+            CandidateDocument.candidate_id == candidate.id,
+        )
+    )
+    if document is None:
+        raise NotFoundError("Document not found")
+    return document
+
+
 def add_document(
     db: Session,
     candidate: Candidate,
