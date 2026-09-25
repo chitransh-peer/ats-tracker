@@ -106,12 +106,17 @@ jobs:
           STORAGE_SECRET_KEY: ${{ secrets.STORAGE_SECRET_KEY }}
           REDIS_URL: ${{ vars.REDIS_URL }}
         run: |
-          pairs=""
+          # Written to a file rather than a flag string. The deploy action splits
+          # its `flags` input on whitespace, so a value containing a space -- a
+          # display name like "Peer Consulting Recruiting" -- tore the command
+          # apart. A KEY=VALUE file has no such problem, and also copes with the
+          # commas in CORS_ORIGINS.
+          ENV_FILE="$RUNNER_TEMP/cloudrun.env"
+          : > "$ENV_FILE"
           add() {
             # $1 = variable name on the service, $2 = value. Skips empty values.
             [ -n "$2" ] || return 0
-            if [ -n "$pairs" ]; then pairs="$pairs##"; fi
-            pairs="$pairs$1=$2"
+            printf '%s=%s\n' "$1" "$2" >> "$ENV_FILE"
           }
 
           add APP_ENV production
@@ -147,8 +152,8 @@ jobs:
 
           # The value carries secrets, so only the names are printed. GitHub
           # masks registered secrets in logs, but not printing them is surer.
-          echo "Setting: $(echo "$pairs" | sed 's/##/\n/g' | cut -d= -f1 | tr '\n' ' ')"
-          echo "pairs=$pairs" >> "$GITHUB_OUTPUT"
+          echo "Setting: $(cut -d= -f1 "$ENV_FILE" | tr '\n' ' ')"
+          echo "file=$ENV_FILE" >> "$GITHUB_OUTPUT"
 
       - name: Deploy to Cloud Run
         id: deploy
@@ -157,6 +162,10 @@ jobs:
           service: ${{ env.SERVICE_NAME }}
           region: ${{ env.REGION }}
           image: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          env_vars_file: ${{ steps.envvars.outputs.file }}
+          # merge, not overwrite: anything configured outside this workflow keeps
+          # its value instead of being wiped by a deploy.
+          env_vars_update_strategy: merge
           flags: |
             --allow-unauthenticated
             --port=8000
@@ -164,7 +173,6 @@ jobs:
             --cpu=1
             --memory=1Gi
             --add-cloudsql-instances=peer-website-504716:us-central1:ats-db-instance
-            --update-env-vars=^##^${{ steps.envvars.outputs.pairs }}
 
       - name: Show Output URL
         run: echo "Backend deployed to ${{ steps.deploy.outputs.url }}"
