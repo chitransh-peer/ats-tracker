@@ -29,8 +29,20 @@ def run() -> int:
 
     host = _ask("SMTP host", "smtp-relay.brevo.com")
     port = int(_ask("Port", "587"))
-    username = _ask("Username (your provider's SMTP login)")
-    password = getpass.getpass("Password / SMTP key (hidden): ").strip()
+    # Both are required. Submitting an empty one produces exactly the same
+    # "authentication failed" the real credentials would on a bad password,
+    # which makes the run worse than useless -- it looks like an answer.
+    username = ""
+    while not username:
+        username = _ask("Username (your provider's SMTP login)")
+        if not username:
+            print("  A username is required. Copy the 'Login' from your provider's SMTP page.")
+
+    password = ""
+    while not password:
+        password = getpass.getpass("Password / SMTP key (hidden): ").strip()
+        if not password:
+            print("  A password is required. Nothing is echoed, so type or paste it blind.")
 
     # A pasted credential very often carries a trailing space or newline, and
     # the resulting failure is indistinguishable from a wrong password.
