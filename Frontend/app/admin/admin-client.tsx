@@ -16,12 +16,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import Link from "next/link";
-import { Shield, Search, Activity, Users, Lock, KeyRound, Loader2 } from "lucide-react";
+import { Shield, Search, Activity, Users, Lock, KeyRound, Loader2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth/auth-context";
-import { useUsers, useInviteUser, useUpdateUser } from "@/lib/hooks/use-users";
+import { useUsers, useInviteUser, useUpdateUser, useDeleteUser } from "@/lib/hooks/use-users";
+import { ApiError } from "@/lib/api/client";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useRoles } from "@/lib/hooks/use-roles";
-import type { Role } from "@/lib/api/types";
+import type { Role, User } from "@/lib/api/types";
 import { RolePermissionsDialog } from "./role-permissions-dialog";
 import { AuditPanel } from "./audit-panel";
 
@@ -46,6 +57,11 @@ export function AdminClient() {
   const { data: roles, isLoading: rolesLoading } = useRoles();
   const inviteMutation = useInviteUser();
   const updateUserMutation = useUpdateUser();
+  const deleteUserMutation = useDeleteUser();
+  // Holds the user awaiting confirmation. Deletion cannot be undone, so it
+  // never fires straight off a button press.
+  const [pendingDeletion, setPendingDeletion] = useState<User | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
@@ -237,7 +253,7 @@ export function AdminClient() {
                             {u.is_active ? "Active" : "Deactivated"}
                           </span>
                         </td>
-                        <td className="p-3 text-right">
+                        <td className="p-3 text-right whitespace-nowrap">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -251,6 +267,19 @@ export function AdminClient() {
                             }
                           >
                             {u.is_active ? "Deactivate" : "Activate"}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive"
+                            title="Permanently delete this account"
+                            disabled={deleteUserMutation.isPending}
+                            onClick={() => {
+                              setDeleteError(null);
+                              setPendingDeletion(u);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </td>
                       </tr>
@@ -354,6 +383,58 @@ export function AdminClient() {
           onOpenChange={(open) => !open && setEditingRole(null)}
         />
       )}
+
+      <AlertDialog
+        open={pendingDeletion !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeletion(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {pendingDeletion?.full_name}?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  This permanently removes <strong>{pendingDeletion?.email}</strong> from the
+                  database. It cannot be undone.
+                </p>
+                <p>
+                  Their jobs, candidates and notes are kept, but are no longer attributed to anyone.
+                  If you only want to revoke access, use <strong>Deactivate</strong> instead — that
+                  keeps the record and can be reversed.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteError && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {deleteError}
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteUserMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteUserMutation.isPending}
+              onClick={(event) => {
+                // The dialog would otherwise close on click, hiding any error.
+                event.preventDefault();
+                if (!pendingDeletion) return;
+                deleteUserMutation.mutate(pendingDeletion.id, {
+                  onSuccess: () => setPendingDeletion(null),
+                  onError: (err) =>
+                    setDeleteError(
+                      err instanceof ApiError ? err.message : "Could not delete that user.",
+                    ),
+                });
+              }}
+            >
+              {deleteUserMutation.isPending ? "Deleting…" : "Delete permanently"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppShell>
   );
 }

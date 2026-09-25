@@ -54,6 +54,7 @@ class AuditAction(str, enum.Enum):
     USER_INVITED = "user_invited"
     USER_ACTIVATED = "user_activated"
     USER_DEACTIVATED = "user_deactivated"
+    USER_DELETED = "user_deleted"
     ROLE_ASSIGNED = "role_assigned"
     ROLE_REVOKED = "role_revoked"
     PERMISSION_CHANGED = "permission_changed"

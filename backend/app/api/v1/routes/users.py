@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db_session, require_permission
-from app.core.enums import PermissionAction, PermissionResource
+from app.api.deps import get_db_session, require_permission, require_super_admin
+from app.core.enums import AuditAction, PermissionAction, PermissionResource
 from app.schemas.auth import CurrentUser
 from app.schemas.user import AssignRolesRequest, UserRead, UserUpdate
 from app.services.audit.service import record as record_audit
@@ -118,6 +118,38 @@ def update_user(
     user = user_service.get_user_by_id(db, current_user.organization_id, user_id)
     user = user_service.update_user(db, user, full_name=payload.full_name, is_active=payload.is_active)
     return _to_read(user)
+
+
+@router.delete("/{user_id}", status_code=204)
+def delete_user(
+    user_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_super_admin),
+    db: Session = Depends(get_db_session),
+) -> None:
+    """Permanently delete a user. Super Admin only, and irreversible.
+
+    Gated above the ordinary user:delete permission on purpose: deactivation
+    covers the everyday case of someone leaving, and this does not.
+    """
+    user = user_service.get_user_by_id(db, current_user.organization_id, user_id)
+
+    # Recorded before the row goes, and carrying the identity, because the
+    # deleted user's other audit entries lose their author to ON DELETE SET
+    # NULL. This one entry is what preserves the trace.
+    record_audit(
+        db,
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action=AuditAction.USER_DELETED.value,
+        resource_type="user",
+        resource_id=str(user.id),
+        metadata={
+            "email": user.email,
+            "full_name": user.full_name,
+            "roles": user_service.role_names_for_user(user),
+        },
+    )
+    user_service.delete_user(db, user, acting_user_id=current_user.id)
 
 
 @router.post("/{user_id}/roles", response_model=UserRead)

@@ -20,3 +20,8 @@ export function updateUser(userId: string, input: { full_name?: string; is_activ
 export function assignRoles(userId: string, roleNames: string[]) {
   return apiClient.post<User>(`/users/${userId}/roles`, { role_names: roleNames });
 }
+
+/** Permanently removes the account. Not the same as deactivating. */
+export function deleteUser(userId: string) {
+  return apiClient.delete<void>(`/users/${userId}`);
+}
