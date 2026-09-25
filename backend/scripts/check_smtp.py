@@ -61,6 +61,9 @@ def run() -> int:
             print("\n*** Authentication succeeded. These credentials are correct. ***")
 
             recipient = _ask("\nSend a test message to (blank to skip)")
+            while recipient and "@" not in recipient:
+                print("  That is not an email address. Give a full address, or blank to skip.")
+                recipient = _ask("Send a test message to (blank to skip)")
             if recipient:
                 sender = _ask("From address (must be verified with your provider)")
                 message = EmailMessage()
@@ -84,6 +87,18 @@ def run() -> int:
     except smtplib.SMTPSenderRefused as exc:
         print(f"\n*** Sender refused: {exc.smtp_error.decode(errors='replace')} ***")
         print("The login worked. That From address is not verified with your provider.")
+        return 1
+    except smtplib.SMTPRecipientsRefused as exc:
+        print(f"\n*** The server refused the recipient: {exc.recipients} ***")
+        print("Authentication itself worked — these credentials are good.")
+        return 1
+    except smtplib.SMTPException as exc:
+        # Ordered before OSError deliberately: smtplib.SMTPException subclasses
+        # OSError, so without this every protocol-level refusal was reported as
+        # "could not reach the host" — which sent us looking at the network
+        # when the connection had in fact succeeded.
+        print(f"\n*** The mail server refused the request: {exc} ***")
+        print("The connection and login were fine; the server objected to the message.")
         return 1
     except OSError as exc:
         print(f"\n*** Could not reach {host}:{port} — {exc} ***")
