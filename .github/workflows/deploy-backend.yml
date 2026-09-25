@@ -1,6 +1,10 @@
 name: Deploy ATS Backend to Cloud Run
 
 on:
+  # Config lives in repository variables and secrets, which no commit
+  # touches. Without a manual trigger the only way to apply a changed
+  # setting is an empty commit, so the button is the honest interface.
+  workflow_dispatch:
   push:
     branches:
       - main
