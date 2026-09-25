@@ -32,6 +32,14 @@ class EmailStatusRead(BaseModel):
     app_base_url: str
 
 
+class EmailTestResult(BaseModel):
+    """Outcome of a deliberate test send, with the provider's reason on failure."""
+
+    sent: bool
+    to: str
+    detail: str
+
+
 class SystemStatusRead(BaseModel):
     """What the running service is actually configured with.
 

@@ -8,12 +8,15 @@ from app.core.enums import AuditAction, PermissionAction, PermissionResource
 from app.schemas.auth import CurrentUser
 from app.schemas.organization import (
     EmailStatusRead,
+    EmailTestResult,
     OrganizationRead,
     OrganizationSettingsUpdate,
     SystemStatusRead,
 )
 from app.services.audit.service import record as record_audit
+from app.services.mail import service as mail_service
 from app.services.organizations import service as organization_service
+from app.services.users.service import get_user_by_id
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -35,6 +38,41 @@ def get_email_status(
         from_email=settings.mail_from_email,
         from_name=settings.mail_from_name,
         app_base_url=settings.app_base_url,
+    )
+
+
+@router.post("/email-test", response_model=EmailTestResult)
+def send_test_email(
+    current_user: CurrentUser = Depends(require_super_admin),
+    db: Session = Depends(get_db_session),
+) -> EmailTestResult:
+    """Send a test message to the caller's own address and report what happened.
+
+    Ordinary sends are fire-and-forget by design, so a misconfigured mailer is
+    invisible from inside the app -- invitations simply never arrive. This runs
+    the same send synchronously and hands back the provider's actual refusal,
+    which is the difference between "wrong password" and "account not yet
+    activated" without needing access to the host's logs.
+
+    Addressed only to the caller, so it cannot be used to send mail to anyone
+    else.
+    """
+    user = get_user_by_id(db, current_user.organization_id, current_user.id)
+    error = mail_service.send_email_reporting_errors(
+        to=user.email,
+        subject="ATS Tracker test email",
+        text_body=("This is a test message from ATS Tracker.\n\nIf you are reading it, outbound email is working.\n"),
+    )
+    if error is not None:
+        return EmailTestResult(sent=False, to=user.email, detail=error)
+    return EmailTestResult(
+        sent=True,
+        to=user.email,
+        detail=(
+            "The mail server accepted the message. If it does not arrive, check "
+            "the spam folder and your provider's own delivery log — acceptance "
+            "is not the same as delivery."
+        ),
     )
 
 

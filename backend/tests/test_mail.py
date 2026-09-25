@@ -223,3 +223,51 @@ def test_invite_still_delivers_mail_when_no_broker_is_configured(
     assert sent == [("no-broker-invitee@example.com", sent[0][1])]
     # The credential itself must be in the message that went out.
     assert response.json()["temporary_password"]
+
+
+def test_email_test_endpoint_is_super_admin_only(client, make_user, auth_headers):
+    admin, password = make_user(role_names=[RoleName.ADMIN.value])
+    response = client.post("/api/v1/settings/email-test", headers=auth_headers(admin.email, password))
+    assert response.status_code == 403
+
+
+def test_email_test_reports_why_a_send_failed(client, make_user, auth_headers, mail_settings):
+    """The whole point: an operator with no host log access still learns the
+    reason. A silent failure is what made this undiagnosable in the first
+    place."""
+    mail_settings.smtp_host = ""
+
+    user, password = make_user(role_names=[RoleName.SUPER_ADMIN.value])
+    response = client.post("/api/v1/settings/email-test", headers=auth_headers(user.email, password))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["sent"] is False
+    assert "SMTP_HOST" in body["detail"]
+    assert body["to"] == user.email
+
+
+def test_email_test_only_ever_sends_to_the_caller(client, make_user, auth_headers, mail_settings):
+    """It takes no recipient argument, so it cannot be turned into a way of
+    sending mail to arbitrary addresses."""
+    mail_settings.smtp_host = "localhost"
+
+    user, password = make_user(role_names=[RoleName.SUPER_ADMIN.value])
+    sent_to: list[str] = []
+
+    import app.services.mail.service as mail_service
+
+    original = mail_service._build_message
+
+    def _capture(**kwargs):
+        sent_to.append(kwargs["to"])
+        return original(**kwargs)
+
+    mail_service._build_message = _capture
+    try:
+        response = client.post("/api/v1/settings/email-test", headers=auth_headers(user.email, password))
+    finally:
+        mail_service._build_message = original
+
+    assert response.status_code == 200
+    assert sent_to == [user.email]
