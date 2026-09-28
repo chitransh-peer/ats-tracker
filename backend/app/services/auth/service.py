@@ -27,6 +27,17 @@ from app.services.users.service import get_user_by_email, get_user_by_email_any_
 
 _settings = get_settings()
 
+# Consecutive wrong passwords before an account is locked, and for how long.
+# Ten is well past anyone mistyping; fifteen minutes turns an online guessing
+# attack into a handful of guesses an hour per account.
+MAX_FAILED_LOGINS = 10
+LOCKOUT_DURATION = timedelta(minutes=15)
+
+# Verified against when the email matches no account, so an unknown email costs
+# the same bcrypt time as a wrong password and response timing does not reveal
+# which addresses have accounts.
+_DUMMY_PASSWORD_HASH = hash_password(secrets.token_urlsafe(16))
+
 
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
@@ -55,8 +66,24 @@ def _issue_token_pair(db: Session, user: User) -> tuple[str, str]:
 
 def login(db: Session, *, email: str, password: str, ip_address: str | None) -> tuple[str, str]:
     user = get_user_by_email_any_org(db, email)
-    if user is None or not verify_password(password, user.hashed_password):
+    if user is None:
+        verify_password(password, _DUMMY_PASSWORD_HASH)
         raise UnauthorizedError("Invalid email or password")
+
+    now = datetime.now(UTC)
+    if user.locked_until is not None and user.locked_until > now:
+        raise UnauthorizedError("Too many failed sign-in attempts. Try again in a few minutes, or reset your password.")
+
+    if not verify_password(password, user.hashed_password):
+        user.failed_login_count = (user.failed_login_count or 0) + 1
+        if user.failed_login_count >= MAX_FAILED_LOGINS:
+            user.locked_until = now + LOCKOUT_DURATION
+            user.failed_login_count = 0
+        db.commit()
+        raise UnauthorizedError("Invalid email or password")
+
+    user.failed_login_count = 0
+    user.locked_until = None
     if not user.is_active:
         raise UnauthorizedError("This account has been deactivated")
     # Only a temporary password carries a deadline; a password the user chose
@@ -267,6 +294,9 @@ def reset_password(db: Session, *, token: str, new_password: str) -> None:
 
     user.hashed_password = hash_password(new_password)
     reset_token.used_at = datetime.now(UTC)
+    # Proving control of the mailbox is the way out of a lockout.
+    user.failed_login_count = 0
+    user.locked_until = None
     # Someone who never used their temporary password can recover through the
     # ordinary forgot-password flow. They have just chosen a password of their
     # own, so the invitation is complete and the gate must not stay closed.

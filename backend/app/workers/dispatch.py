@@ -20,6 +20,8 @@ credential.
 import logging
 from typing import Any
 
+from fastapi import BackgroundTasks
+
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -67,3 +69,33 @@ def dispatch(actor: Any, *args: Any, allow_inline: bool = False, **kwargs: Any) 
         actor.fn(*args, **kwargs)
     except Exception:
         logger.exception("Inline execution of %s failed.", getattr(actor, "actor_name", actor))
+
+
+def dispatch_after_response(background_tasks: BackgroundTasks, actor: Any, *args: Any) -> None:
+    """Queue `actor`, or run it in this process once the response has been sent.
+
+    For work a request triggers but must not wait on -- scoring a careers-page
+    application above all, where the applicant should get their confirmation
+    straight away. Without a broker, plain `dispatch` could only run it inline
+    (the applicant waits on an LLM) or drop it (it is never scored). This runs it
+    in-process after the response instead. The deployment must keep CPU
+    allocated after a response for that to finish promptly (Cloud Run's
+    --no-cpu-throttling); anything that still does not finish is picked up again
+    by app/services/ai/recovery.py.
+    """
+    if broker_available():
+        try:
+            actor.send(*args)
+            return
+        except Exception:
+            logger.exception(
+                "Could not enqueue %s; running it after the response instead.", getattr(actor, "actor_name", actor)
+            )
+    background_tasks.add_task(_run_logged, actor, *args)
+
+
+def _run_logged(actor: Any, *args: Any) -> None:
+    try:
+        actor.fn(*args)
+    except Exception:
+        logger.exception("Background execution of %s failed.", getattr(actor, "actor_name", actor))

@@ -12,11 +12,12 @@ set -e
 python -m scripts.startup
 
 echo "[entrypoint] Starting API on port ${PORT:-8000}..."
-# --proxy-headers: behind Cloud Run's front end, the client address only
-# survives on X-Forwarded-For. Without it every request looks like it came from
-# the proxy and the per-IP login rate limit is shared by all users at once.
+# --no-proxy-headers: uvicorn would otherwise take the *leftmost*
+# X-Forwarded-For entry, which the client writes itself, and every per-IP rate
+# limit could be walked past by sending a fresh fake address each time. The real
+# client address is read from the right-hand end instead, by
+# app/core/client_ip.py, using the TRUSTED_PROXY_HOPS setting.
 exec uvicorn app.main:app \
     --host 0.0.0.0 \
     --port "${PORT:-8000}" \
-    --proxy-headers \
-    --forwarded-allow-ips='*'
+    --no-proxy-headers

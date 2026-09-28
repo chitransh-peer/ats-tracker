@@ -120,6 +120,9 @@ jobs:
           }
 
           add APP_ENV production
+          # One proxy (Google's front end) appends to X-Forwarded-For on the
+          # run.app URL. Raise to 2 if a load balancer is put in front.
+          add TRUSTED_PROXY_HOPS 1
           add CORS_ORIGINS "$APP_URL,$FRONTEND_URL"
           add APP_BASE_URL "$APP_URL"
           add JWT_SECRET "$JWT_SECRET"
@@ -172,6 +175,9 @@ jobs:
             --timeout=300
             --cpu=1
             --memory=1Gi
+            --max-instances=3
+            --concurrency=40
+            --no-cpu-throttling
             --add-cloudsql-instances=peer-website-504716:us-central1:ats-db-instance
 
       - name: Show Output URL

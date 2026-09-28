@@ -44,9 +44,12 @@ def test_forgot_password_is_rate_limited_per_ip(client, make_user, rate_limiting
     assert statuses[5] == 429
 
 
-def test_careers_apply_is_rate_limited_per_ip(client, make_user, auth_headers, organization, rate_limiting_enabled):
-    """5/minute — the one endpoint on the whole API that takes a file upload
-    from someone who was never asked to log in."""
+def test_careers_apply_is_rate_limited_per_ip(
+    client, make_user, auth_headers, organization, rate_limiting_enabled, monkeypatch
+):
+    """20/minute — the one endpoint on the whole API that takes a file upload
+    from someone who was never asked to log in. High enough for a busy office
+    applying from one shared address, low enough to stop a flood."""
     user, password = make_user(role_names=[RoleName.RECRUITER.value])
     headers = auth_headers(user.email, password)
     job = client.post(
@@ -55,6 +58,10 @@ def test_careers_apply_is_rate_limited_per_ip(client, make_user, auth_headers, o
         headers=headers,
     ).json()
     client.post(f"/api/v1/jobs/{job['id']}/publish", headers=headers)
+    # Scoring each application is beside the point here, and waiting on it would
+    # stretch 21 requests past the one-minute window being tested.
+    monkeypatch.setattr("app.workers.dispatch.dispatch_after_response", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.services.ai.recovery.resume_stalled_work", lambda: None)
 
     def _apply(n: int):
         return client.post(
@@ -62,7 +69,28 @@ def test_careers_apply_is_rate_limited_per_ip(client, make_user, auth_headers, o
             data={"full_name": f"Applicant {n}", "email": f"applicant{n}@example.com"},
         ).status_code
 
-    statuses = [_apply(n) for n in range(6)]
+    statuses = [_apply(n) for n in range(21)]
 
-    assert 429 not in statuses[:5]
-    assert statuses[5] == 429
+    assert 429 not in statuses[:20]
+    assert statuses[20] == 429
+
+
+def test_a_forged_forwarded_for_header_does_not_reset_the_limit(client, make_user, rate_limiting_enabled, monkeypatch):
+    """Behind Cloud Run the client IP is the entry Google's front end appends --
+    the last one. A caller who sends a fresh fake address each time only changes
+    the entries before it, so it is still counted as the same caller."""
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "trusted_proxy_hops", 1)
+    user, _password = make_user(role_names=[RoleName.RECRUITER.value])
+
+    statuses = [
+        client.post(
+            "/api/v1/auth/login",
+            json={"email": user.email, "password": "wrong"},
+            headers={"X-Forwarded-For": f"10.0.0.{n}, 203.0.113.7"},
+        ).status_code
+        for n in range(11)
+    ]
+
+    assert statuses[10] == 429

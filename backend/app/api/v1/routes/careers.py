@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Request, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -41,9 +41,10 @@ def get_job(org_slug: str, slug: str, db: Session = Depends(get_db_session)) -> 
 
 
 @router.post("/{org_slug}/jobs/{job_id}/apply", response_model=PublicApplyResponse, status_code=201)
-@limiter.limit("5/minute")
+@limiter.limit("20/minute")
 async def apply_to_job(
     request: Request,
+    background_tasks: BackgroundTasks,
     org_slug: str,
     job_id: uuid.UUID,
     full_name: str = Form(...),
@@ -71,5 +72,6 @@ async def apply_to_job(
         resume_bytes=resume_bytes,
         resume_file_name=resume.filename if resume else None,
         resume_content_type=resume.content_type if resume else None,
+        background_tasks=background_tasks,
     )
     return PublicApplyResponse(application_id=application.id, candidate_id=candidate.id, status=application.status)
