@@ -37,9 +37,7 @@ if settings.sentry_dsn:
         # the startup log that a broken DSN doesn't go unnoticed.
         import logging
 
-        logging.getLogger(__name__).exception(
-            "Sentry initialization failed — continuing without error tracking."
-        )
+        logging.getLogger(__name__).exception("Sentry initialization failed — continuing without error tracking.")
 
 # The interactive docs publish the full API surface to anyone who can reach the
 # host, so they are withheld in production. Set EXPOSE_API_DOCS=true to override

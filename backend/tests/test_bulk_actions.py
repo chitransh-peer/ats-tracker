@@ -24,9 +24,7 @@ def test_bulk_reject_rejects_every_active_application(client, make_user, make_jo
         )
         app_ids.append(response.json()["id"])
 
-    response = client.post(
-        "/api/v1/applications/bulk-reject", json={"application_ids": app_ids}, headers=headers
-    )
+    response = client.post("/api/v1/applications/bulk-reject", json={"application_ids": app_ids}, headers=headers)
 
     assert response.status_code == 200
     body = response.json()
@@ -138,8 +136,6 @@ def test_bulk_actions_are_still_scoped_by_permission(client, make_user, make_can
     user, password = make_user(role_names=[RoleName.INTERVIEWER.value])
     headers = auth_headers(user.email, password)
 
-    response = client.post(
-        "/api/v1/talent-bench/bulk", json={"candidate_ids": [str(make_candidate().id)]}, headers=headers
-    )
+    response = client.post("/api/v1/talent-bench/bulk", json={"candidate_ids": [str(make_candidate().id)]}, headers=headers)
 
     assert response.status_code == 403

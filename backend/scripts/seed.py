@@ -56,10 +56,7 @@ def run() -> None:
                 "(FORCE_SUPER_ADMIN_PASSWORD_RESET is set — unset it once you can sign in)"
             )
         else:
-            print(
-                f"Super admin user '{settings.default_super_admin_email}' already exists "
-                "— password left unchanged"
-            )
+            print(f"Super admin user '{settings.default_super_admin_email}' already exists — password left unchanged")
     finally:
         db.close()
 
