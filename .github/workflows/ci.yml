@@ -83,22 +83,22 @@ jobs:
 
       - run: pip install -r requirements-dev.txt
 
-      # Not a `services:` entry because MinIO needs a command argument
-      # (`server /data`) and service containers can't override the image CMD.
-      # Some tests upload candidate documents, so object storage must be live.
-      - name: Start MinIO
+      # S3-compatible object storage for the tests that upload candidate
+      # documents. This used to be the minio/minio image, which Docker Hub no
+      # longer serves ("pull access denied"). moto's server speaks the same S3
+      # API, installs from PyPI, and the app creates the bucket itself on first
+      # use (app/services/storage/service.py), so nothing else changes.
+      - name: Start S3 test server
         run: |
-          docker run -d --name minio -p 9000:9000 \
-            -e MINIO_ROOT_USER=ats-minio \
-            -e MINIO_ROOT_PASSWORD=ats-minio-secret \
-            minio/minio:latest server /data
+          pip install "moto[server]>=5,<6"
+          nohup moto_server -H 127.0.0.1 -p 9000 > moto.log 2>&1 &
           for _ in $(seq 1 30); do
-            if curl -fs http://localhost:9000/minio/health/live > /dev/null; then
-              echo "MinIO is up"; exit 0
+            if curl -fs http://localhost:9000/ > /dev/null; then
+              echo "S3 test server is up"; exit 0
             fi
-            sleep 2
+            sleep 1
           done
-          echo "MinIO failed to become ready"; docker logs minio; exit 1
+          echo "S3 test server failed to start"; cat moto.log; exit 1
 
       - name: Lint
         run: ruff check .
