@@ -1,8 +1,9 @@
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.enums import VendorStatus
 from app.core.exceptions import NotFoundError
 from app.db.models.application import Application
 from app.db.models.user import User
@@ -29,15 +30,83 @@ _LOAD_OPTIONS = (
 )
 
 
+def _search_filter(search: str | None):
+    """Case-insensitive "contains" across the fields the list's search box
+    promises. Backed by trigram indexes, so it stays fast at 50,000 vendors."""
+    if not search or not search.strip():
+        return None
+    like = f"%{search.strip()}%"
+    return or_(Vendor.name.ilike(like), Vendor.state.ilike(like), Vendor.country.ilike(like))
+
+
+def build_vendors_query(organization_id: uuid.UUID, *, search: str | None = None, status: str | None = None) -> Select:
+    """Filtered, ordered vendor query for one page of the list; the caller
+    pages it (app/core/pagination.py)."""
+    query = select(Vendor).where(Vendor.organization_id == organization_id)
+    condition = _search_filter(search)
+    if condition is not None:
+        query = query.where(condition)
+    if status:
+        query = query.where(Vendor.status == status)
+    return query.options(*_LOAD_OPTIONS).order_by(Vendor.created_at.desc(), Vendor.id)
+
+
 def list_vendors(db: Session, organization_id: uuid.UUID) -> list[Vendor]:
-    return list(
-        db.scalars(
-            select(Vendor)
-            .where(Vendor.organization_id == organization_id)
-            .options(*_LOAD_OPTIONS)
-            .order_by(Vendor.created_at.desc())
-        ).all()
+    return list(db.scalars(build_vendors_query(organization_id)).all())
+
+
+def vendor_summary(db: Session, organization_id: uuid.UUID) -> dict:
+    """The list page's headline counts, computed by the database rather than
+    by loading every vendor to count them in the browser."""
+    row = db.execute(
+        select(
+            func.count(Vendor.id),
+            func.count(Vendor.id).filter(Vendor.status == VendorStatus.ACTIVE.value),
+            func.count(Vendor.id).filter(Vendor.primary_vendor.is_(True)),
+        ).where(Vendor.organization_id == organization_id)
+    ).one()
+    submissions = (
+        db.scalar(
+            select(func.count(Application.id)).where(
+                Application.organization_id == organization_id, Application.source.like("vendor:%")
+            )
+        )
+        or 0
     )
+    return {"total": row[0], "active": row[1], "primary": row[2], "active_submissions": submissions}
+
+
+def vendor_options(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    search: str | None = None,
+    ids: list[uuid.UUID] | None = None,
+    limit: int = 20,
+) -> list[tuple[uuid.UUID, str]]:
+    """(id, name) pairs for a type-to-search picker: the first `limit` matches
+    for `search`, or the named `ids` so a picker can label its current value."""
+    query = select(Vendor.id, Vendor.name).where(Vendor.organization_id == organization_id)
+    if ids:
+        query = query.where(Vendor.id.in_(ids))
+    else:
+        condition = _search_filter(search)
+        if condition is not None:
+            query = query.where(condition)
+    return [(r.id, r.name) for r in db.execute(query.order_by(Vendor.name).limit(limit)).all()]
+
+
+def active_submissions_counts(db: Session, organization_id: uuid.UUID, vendor_names: list[str]) -> dict[str, int]:
+    """`active_submissions_count` for a whole page of vendors in one query."""
+    if not vendor_names:
+        return {}
+    tags = {f"vendor:{name}": name for name in vendor_names}
+    rows = db.execute(
+        select(Application.source, func.count(Application.id))
+        .where(Application.organization_id == organization_id, Application.source.in_(list(tags)))
+        .group_by(Application.source)
+    ).all()
+    return {tags[source]: count for source, count in rows}
 
 
 def get_vendor(db: Session, organization_id: uuid.UUID, vendor_id: uuid.UUID) -> Vendor:

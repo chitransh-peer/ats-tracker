@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { AppShell, StatCard } from "@/components/layout/AppShell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useVendors } from "@/lib/hooks/use-vendors";
+import { Pager } from "@/components/ui/pager";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useVendorSummary, useVendorsPage } from "@/lib/hooks/use-vendors";
 import { Plus, Search, Truck, Download } from "lucide-react";
 
 function formatDate(value: string | null) {
@@ -18,26 +20,29 @@ function formatDate(value: string | null) {
   });
 }
 
+const PAGE_SIZE = 50;
+
 export function VendorsClient() {
-  const { data: vendors, isLoading } = useVendors();
   const [search, setSearch] = useState("");
+  const [offset, setOffset] = useState(0);
+  const debouncedSearch = useDebouncedValue(search.trim());
 
-  const filtered = useMemo(() => {
-    const list = vendors ?? [];
-    const query = search.trim().toLowerCase();
-    if (!query) return list;
-    return list.filter(
-      (v) =>
-        v.name.toLowerCase().includes(query) ||
-        (v.state ?? "").toLowerCase().includes(query) ||
-        (v.country ?? "").toLowerCase().includes(query),
-    );
-  }, [vendors, search]);
+  // Paged and searched on the server: at the ~50,000 vendors a Ceipal import
+  // brings in, loading them all to filter in the browser froze the page.
+  const { data, isLoading } = useVendorsPage({
+    search: debouncedSearch || undefined,
+    limit: PAGE_SIZE,
+    offset,
+  });
+  const { data: summary } = useVendorSummary();
+  const filtered = data?.data ?? [];
+  const matching = data?.total ?? 0;
 
-  const total = vendors?.length ?? 0;
-  const active = vendors?.filter((v) => v.status === "Active").length ?? 0;
-  const submissions = vendors?.reduce((sum, v) => sum + v.active_submissions, 0) ?? 0;
-  const primary = vendors?.filter((v) => v.primary_vendor).length ?? 0;
+  function updateSearch(value: string) {
+    setSearch(value);
+    // Page 3 of the old search would silently apply to the new one.
+    setOffset(0);
+  }
 
   return (
     <AppShell
@@ -59,10 +64,14 @@ export function VendorsClient() {
       }
     >
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Vendors" value={total} hint="Partnered agencies" />
-        <StatCard label="Active" value={active} tone="success" />
-        <StatCard label="Live submissions" value={submissions} hint="Awaiting review" />
-        <StatCard label="Primary vendors" value={primary} />
+        <StatCard label="Vendors" value={summary?.total ?? 0} hint="Partnered agencies" />
+        <StatCard label="Active" value={summary?.active ?? 0} tone="success" />
+        <StatCard
+          label="Live submissions"
+          value={summary?.active_submissions ?? 0}
+          hint="Awaiting review"
+        />
+        <StatCard label="Primary vendors" value={summary?.primary ?? 0} />
       </section>
 
       <Card>
@@ -74,7 +83,7 @@ export function VendorsClient() {
                 placeholder="Search vendors, state, country…"
                 className="pl-9 h-9"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => updateSearch(e.target.value)}
               />
             </div>
           </div>
@@ -107,11 +116,17 @@ export function VendorsClient() {
                 {!isLoading && filtered.length === 0 && (
                   <tr>
                     <td colSpan={11} className="p-6 text-center text-muted-foreground">
-                      No vendors yet.{" "}
-                      <Link href="/vendors/new" className="text-primary hover:underline">
-                        Add your first vendor
-                      </Link>
-                      .
+                      {debouncedSearch ? (
+                        "No vendors match that search."
+                      ) : (
+                        <>
+                          No vendors yet.{" "}
+                          <Link href="/vendors/new" className="text-primary hover:underline">
+                            Add your first vendor
+                          </Link>
+                          .
+                        </>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -163,6 +178,7 @@ export function VendorsClient() {
             </table>
           </div>
         </CardContent>
+        <Pager offset={offset} limit={PAGE_SIZE} total={matching} onOffsetChange={setOffset} />
       </Card>
     </AppShell>
   );

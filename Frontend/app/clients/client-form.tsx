@@ -19,7 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useClients, useCreateClient, useUpdateClient } from "@/lib/hooks/use-clients";
+import { useCreateClient, useUpdateClient } from "@/lib/hooks/use-clients";
+import { EntityPicker } from "@/components/entity-picker";
 import { useUsers } from "@/lib/hooks/use-users";
 import {
   ASSIGNMENT_ROLES,
@@ -205,7 +206,6 @@ export function ClientForm({ client }: { client?: Client }) {
   const createClient = useCreateClient();
   const updateClient = useUpdateClient(client?.id ?? "");
   const { data: users } = useUsers();
-  const { data: allClients } = useClients();
 
   const [section, setSection] = useState<SectionKey>("business");
   const [error, setError] = useState<string | null>(null);
@@ -220,13 +220,6 @@ export function ClientForm({ client }: { client?: Client }) {
   const userOptions = useMemo(
     () => (users ?? []).map((u) => ({ value: u.id, label: `${u.full_name} (${u.email})` })),
     [users],
-  );
-  const parentOptions = useMemo(
-    () =>
-      (allClients ?? [])
-        .filter((c) => c.id !== client?.id)
-        .map((c) => ({ value: c.id, label: c.name })),
-    [allClients, client?.id],
   );
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -469,11 +462,12 @@ export function ClientForm({ client }: { client?: Client }) {
                         />
                       </Field>
                       <Field label="Child / Parent Client">
-                        <OptionalSelect
+                        <EntityPicker
+                          kind="clients"
                           value={form.parent_client_id}
                           onChange={(v) => set("parent_client_id", v)}
-                          placeholder="Select parent client"
-                          options={parentOptions}
+                          placeholder="Search for a parent client"
+                          excludeId={client?.id}
                         />
                       </Field>
                       <Field label="Client Facilities">

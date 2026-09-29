@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreateJob, useUpdateJob } from "@/lib/hooks/use-jobs";
-import { useClients } from "@/lib/hooks/use-clients";
+import { EntityPicker } from "@/components/entity-picker";
 import { useUsers } from "@/lib/hooks/use-users";
 import {
   CURRENCIES,
@@ -312,7 +312,6 @@ export function JobForm({ job }: { job?: Job }) {
   const isEdit = Boolean(job);
   const createJob = useCreateJob();
   const updateJob = useUpdateJob(job?.id ?? "");
-  const { data: clients } = useClients();
   const { data: users } = useUsers();
 
   const [error, setError] = useState<string | null>(null);
@@ -321,10 +320,6 @@ export function JobForm({ job }: { job?: Job }) {
   const userOptions = useMemo(
     () => (users ?? []).map((u) => ({ value: u.id, label: u.full_name })),
     [users],
-  );
-  const clientOptions = useMemo(
-    () => (clients ?? []).map((c) => ({ value: c.id, label: c.name })),
-    [clients],
   );
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -697,11 +692,11 @@ export function JobForm({ job }: { job?: Job }) {
                 />
               </Field>
               <Field label="Client" required>
-                <OptionalSelect
+                <EntityPicker
+                  kind="clients"
                   value={form.client_id}
                   onChange={(v) => set("client_id", v)}
                   placeholder="Search for a client"
-                  options={clientOptions}
                 />
               </Field>
               <Field label="End Client">

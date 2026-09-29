@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { AppShell, StatCard } from "@/components/layout/AppShell";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { useClients } from "@/lib/hooks/use-clients";
+import { Pager } from "@/components/ui/pager";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useClientSummary, useClientsPage } from "@/lib/hooks/use-clients";
 import { Plus, Search, Building2, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,26 +31,29 @@ function formatDate(value: string | null) {
   });
 }
 
+const PAGE_SIZE = 50;
+
 export function ClientsClient() {
-  const { data: clients, isLoading } = useClients();
   const [search, setSearch] = useState("");
+  const [offset, setOffset] = useState(0);
+  const debouncedSearch = useDebouncedValue(search.trim());
 
-  const filtered = useMemo(() => {
-    const list = clients ?? [];
-    const query = search.trim().toLowerCase();
-    if (!query) return list;
-    return list.filter(
-      (c) =>
-        c.name.toLowerCase().includes(query) ||
-        c.client_code.toLowerCase().includes(query) ||
-        (c.industry ?? "").toLowerCase().includes(query),
-    );
-  }, [clients, search]);
+  // Paged and searched on the server: at the ~10,000 clients a Ceipal import
+  // brings in, loading them all to filter in the browser froze the page.
+  const { data, isLoading } = useClientsPage({
+    search: debouncedSearch || undefined,
+    limit: PAGE_SIZE,
+    offset,
+  });
+  const { data: summary } = useClientSummary();
+  const filtered = data?.data ?? [];
+  const matching = data?.total ?? 0;
 
-  const total = clients?.length ?? 0;
-  const active = clients?.filter((c) => c.status === "Active").length ?? 0;
-  const openJobs = clients?.reduce((sum, c) => sum + c.active_jobs, 0) ?? 0;
-  const prospects = clients?.filter((c) => c.status === "Prospect").length ?? 0;
+  function updateSearch(value: string) {
+    setSearch(value);
+    // Page 3 of the old search would silently apply to the new one.
+    setOffset(0);
+  }
 
   return (
     <AppShell
@@ -70,10 +75,14 @@ export function ClientsClient() {
       }
     >
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Total clients" value={total} hint="All accounts" />
-        <StatCard label="Active" value={active} tone="success" />
-        <StatCard label="Open requisitions" value={openJobs} hint="Across all clients" />
-        <StatCard label="Prospects" value={prospects} />
+        <StatCard label="Total clients" value={summary?.total ?? 0} hint="All accounts" />
+        <StatCard label="Active" value={summary?.active ?? 0} tone="success" />
+        <StatCard
+          label="Open requisitions"
+          value={summary?.open_jobs ?? 0}
+          hint="Across all clients"
+        />
+        <StatCard label="Prospects" value={summary?.prospects ?? 0} />
       </section>
 
       <Card>
@@ -85,7 +94,7 @@ export function ClientsClient() {
                 placeholder="Search clients, client IDs…"
                 className="pl-9 h-9"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => updateSearch(e.target.value)}
               />
             </div>
           </div>
@@ -122,11 +131,17 @@ export function ClientsClient() {
                 {!isLoading && filtered.length === 0 && (
                   <tr>
                     <td colSpan={15} className="p-6 text-center text-muted-foreground">
-                      No clients yet.{" "}
-                      <Link href="/clients/new" className="text-primary hover:underline">
-                        Add your first client
-                      </Link>
-                      .
+                      {debouncedSearch ? (
+                        "No clients match that search."
+                      ) : (
+                        <>
+                          No clients yet.{" "}
+                          <Link href="/clients/new" className="text-primary hover:underline">
+                            Add your first client
+                          </Link>
+                          .
+                        </>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -198,6 +213,7 @@ export function ClientsClient() {
             </table>
           </div>
         </CardContent>
+        <Pager offset={offset} limit={PAGE_SIZE} total={matching} onOffsetChange={setOffset} />
       </Card>
     </AppShell>
   );

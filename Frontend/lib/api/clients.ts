@@ -13,8 +13,58 @@ import type {
   ClientUpdateInput,
 } from "./types";
 
-export function listClients() {
-  return apiClient.get<Client[]>("/clients");
+export interface ClientSummary {
+  total: number;
+  active: number;
+  prospects: number;
+  open_jobs: number;
+}
+
+/** An id/name pair for type-to-search pickers. */
+export interface EntityOption {
+  id: string;
+  name: string;
+}
+
+export interface ClientFilters {
+  search?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+}
+
+function toQuery(params: Record<string, string | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) query.set(key, value);
+  }
+  const qs = query.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/** One page of clients, plus the total across all pages. */
+export function listClientsPage(filters: ClientFilters = {}) {
+  return apiClient.getPage<Client>(
+    `/clients${toQuery({
+      search: filters.search,
+      status: filters.status,
+      limit: filters.limit?.toString(),
+      offset: filters.offset?.toString(),
+    })}`,
+  );
+}
+
+export function getClientSummary() {
+  return apiClient.get<ClientSummary>("/clients/summary");
+}
+
+/** Up to 20 clients matching `search`, or exactly the given `ids`. */
+export function searchClientOptions(search: string, ids: string[] = []) {
+  const query = new URLSearchParams();
+  if (search) query.set("search", search);
+  for (const id of ids) query.append("ids", id);
+  const qs = query.toString();
+  return apiClient.get<EntityOption[]>(`/clients/options${qs ? `?${qs}` : ""}`);
 }
 
 export function getClient(clientId: string) {

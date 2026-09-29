@@ -9,8 +9,16 @@ import type {
   ClientUpdateInput,
 } from "@/lib/api/types";
 
-export function useClients() {
-  return useQuery({ queryKey: ["clients"], queryFn: clientsApi.listClients });
+export function useClientsPage(filters: clientsApi.ClientFilters) {
+  return useQuery({
+    queryKey: ["clients", "page", filters],
+    queryFn: () => clientsApi.listClientsPage(filters),
+    placeholderData: (previous) => previous,
+  });
+}
+
+export function useClientSummary() {
+  return useQuery({ queryKey: ["clients", "summary"], queryFn: clientsApi.getClientSummary });
 }
 
 export function useClient(clientId: string) {
