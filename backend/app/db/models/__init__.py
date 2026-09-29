@@ -27,6 +27,7 @@ from app.db.models.hotlist import (
     HotlistRecipient,
     HotlistSend,
 )
+from app.db.models.import_job import ImportJob, ImportPreset, ImportRow
 from app.db.models.interview import Interview, InterviewFeedback, InterviewPanelMember
 from app.db.models.invitation import Invitation
 from app.db.models.job import Job, JobCustomField, JobDocument, JobNote, JobSearchCriteria
@@ -50,6 +51,9 @@ from app.db.models.vendor import (
 
 __all__ = [
     "Base",
+    "ImportJob",
+    "ImportPreset",
+    "ImportRow",
     "Organization",
     "OrganizationSettings",
     "User",

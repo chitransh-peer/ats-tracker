@@ -74,7 +74,7 @@ class BenchProfileRead(BaseModel):
 
     # Flattened from the candidate so the bench grid needs one request, not N.
     full_name: str
-    email: str
+    email: str | None
     phone: str | None
     location: str | None
     current_title: str | None

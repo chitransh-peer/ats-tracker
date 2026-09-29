@@ -10,6 +10,7 @@ from app.api.v1.routes import (
     careers,
     clients,
     hotlists,
+    imports,
     interviews,
     jobs,
     offers,
@@ -29,6 +30,7 @@ api_router.include_router(users.router)
 api_router.include_router(roles.router)
 api_router.include_router(clients.router)
 api_router.include_router(vendors.router)
+api_router.include_router(imports.router)
 api_router.include_router(jobs.router)
 api_router.include_router(candidates.router)
 api_router.include_router(applications.router)

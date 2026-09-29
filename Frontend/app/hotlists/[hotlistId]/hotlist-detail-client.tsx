@@ -33,8 +33,7 @@ import {
   useSendHotlist,
 } from "@/lib/hooks/use-hotlists";
 import { useBenchProfiles } from "@/lib/hooks/use-bench";
-import { useClients } from "@/lib/hooks/use-clients";
-import { useVendors } from "@/lib/hooks/use-vendors";
+import { EntityPicker } from "@/components/entity-picker";
 import { useTemplates } from "@/lib/hooks/use-templates";
 import { useEmailStatus } from "@/lib/hooks/use-settings";
 import { exportHotlist, downloadRecipientTemplate } from "@/lib/api/hotlists";
@@ -50,8 +49,6 @@ export function HotlistDetailClient() {
   const { data: hotlist, isLoading } = useHotlist(hotlistId);
   const { data: sends } = useHotlistSends(hotlistId);
   const { data: bench } = useBenchProfiles({ status: "Active Bench" });
-  const { data: clients } = useClients();
-  const { data: vendors } = useVendors();
   const { data: templates } = useTemplates();
   const { data: emailStatus } = useEmailStatus();
 
@@ -330,47 +327,33 @@ export function HotlistDetailClient() {
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label className="text-xs">Client</Label>
-                      <Select
-                        onValueChange={(id) =>
+                      <EntityPicker
+                        kind="clients"
+                        value={null}
+                        placeholder="Add all contacts…"
+                        onChange={(id) =>
+                          id &&
                           run(
                             () => addFromParties.mutateAsync({ client_ids: [id] }),
                             "Could not add those contacts.",
                           )
                         }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Add all contacts…" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(clients ?? []).map((c) => (
-                            <SelectItem key={c.id} value={c.id}>
-                              {c.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Vendor</Label>
-                      <Select
-                        onValueChange={(id) =>
+                      <EntityPicker
+                        kind="vendors"
+                        value={null}
+                        placeholder="Add vendor contact…"
+                        onChange={(id) =>
+                          id &&
                           run(
                             () => addFromParties.mutateAsync({ vendor_ids: [id] }),
                             "Could not add those contacts.",
                           )
                         }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Add vendor contact…" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(vendors ?? []).map((v) => (
-                            <SelectItem key={v.id} value={v.id}>
-                              {v.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      />
                     </div>
                   </div>
 

@@ -10,8 +10,16 @@ import type {
   VendorUpdateInput,
 } from "@/lib/api/types";
 
-export function useVendors() {
-  return useQuery({ queryKey: ["vendors"], queryFn: vendorsApi.listVendors });
+export function useVendorsPage(filters: vendorsApi.VendorFilters) {
+  return useQuery({
+    queryKey: ["vendors", "page", filters],
+    queryFn: () => vendorsApi.listVendorsPage(filters),
+    placeholderData: (previous) => previous,
+  });
+}
+
+export function useVendorSummary() {
+  return useQuery({ queryKey: ["vendors", "summary"], queryFn: vendorsApi.getVendorSummary });
 }
 
 export function useVendor(vendorId: string) {

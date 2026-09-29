@@ -246,7 +246,8 @@ export interface EducationItem {
 export interface DuplicateWarning {
   candidate_id: string;
   full_name: string;
-  email: string;
+  /** Null only for candidates imported without one. */
+  email: string | null;
   match_reason: string;
 }
 
@@ -254,7 +255,8 @@ export interface Candidate {
   id: string;
   organization_id: string;
   full_name: string;
-  email: string;
+  /** Null only for candidates imported without one. */
+  email: string | null;
   phone: string | null;
   location: string | null;
   current_company: string | null;

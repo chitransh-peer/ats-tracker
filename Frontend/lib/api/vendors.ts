@@ -15,8 +15,58 @@ import type {
   VendorUpdateInput,
 } from "./types";
 
-export function listVendors() {
-  return apiClient.get<Vendor[]>("/vendors");
+export interface VendorSummary {
+  total: number;
+  active: number;
+  primary: number;
+  active_submissions: number;
+}
+
+/** An id/name pair for type-to-search pickers. */
+export interface EntityOption {
+  id: string;
+  name: string;
+}
+
+export interface VendorFilters {
+  search?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+}
+
+function toQuery(params: Record<string, string | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) query.set(key, value);
+  }
+  const qs = query.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/** One page of vendors, plus the total across all pages. */
+export function listVendorsPage(filters: VendorFilters = {}) {
+  return apiClient.getPage<Vendor>(
+    `/vendors${toQuery({
+      search: filters.search,
+      status: filters.status,
+      limit: filters.limit?.toString(),
+      offset: filters.offset?.toString(),
+    })}`,
+  );
+}
+
+export function getVendorSummary() {
+  return apiClient.get<VendorSummary>("/vendors/summary");
+}
+
+/** Up to 20 vendors matching `search`, or exactly the given `ids`. */
+export function searchVendorOptions(search: string, ids: string[] = []) {
+  const query = new URLSearchParams();
+  if (search) query.set("search", search);
+  for (const id of ids) query.append("ids", id);
+  const qs = query.toString();
+  return apiClient.get<EntityOption[]>(`/vendors/options${qs ? `?${qs}` : ""}`);
 }
 
 export function getVendor(vendorId: string) {

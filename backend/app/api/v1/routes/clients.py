@@ -1,11 +1,13 @@
 import uuid
 
-from fastapi import APIRouter, Depends, File, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session, require_permission
 from app.api.v1.routes._documents import document_response
 from app.core.enums import PermissionAction, PermissionResource
+from app.core.pagination import PageParams, page_params, paginate
 from app.schemas.auth import CurrentUser
 from app.schemas.client import (
     ClientAccountCreate,
@@ -29,7 +31,19 @@ _CREATE = require_permission(PermissionResource.CLIENT, PermissionAction.CREATE)
 _UPDATE = require_permission(PermissionResource.CLIENT, PermissionAction.UPDATE)
 
 
-def _to_read(db: Session, client) -> ClientRead:
+class ClientSummary(BaseModel):
+    total: int
+    active: int
+    prospects: int
+    open_jobs: int
+
+
+class ClientOption(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+def _to_read(db: Session, client, *, active_jobs: int | None = None) -> ClientRead:
     return ClientRead(
         **{
             column.name: getattr(client, column.name)
@@ -55,7 +69,7 @@ def _to_read(db: Session, client) -> ClientRead:
             )
             for a in client.assignments
         ],
-        active_jobs=client_service.active_jobs_count(db, client.id),
+        active_jobs=active_jobs if active_jobs is not None else client_service.active_jobs_count(db, client.id),
     )
 
 
@@ -73,11 +87,42 @@ def _note_read(note) -> ClientNoteRead:
 
 @router.get("", response_model=list[ClientRead])
 def list_clients(
+    response: Response,
+    search: str | None = None,
+    status: str | None = None,
+    pagination: PageParams = Depends(page_params),
     current_user: CurrentUser = Depends(_READ),
     db: Session = Depends(get_db_session),
 ) -> list[ClientRead]:
-    clients = client_service.list_clients(db, current_user.organization_id)
-    return [_to_read(db, c) for c in clients]
+    """One page of clients; the total rides on X-Total-Count. Paged because a
+    Ceipal import brings in ~10,000, and returning them all at once hung the
+    page and every dropdown built from it."""
+    query = client_service.build_clients_query(current_user.organization_id, search=search, status=status)
+    clients, total = paginate(db, query, pagination)
+    response.headers["X-Total-Count"] = str(total)
+    counts = client_service.active_jobs_counts(db, [c.id for c in clients])
+    return [_to_read(db, c, active_jobs=counts.get(c.id, 0)) for c in clients]
+
+
+@router.get("/summary", response_model=ClientSummary)
+def client_summary(
+    current_user: CurrentUser = Depends(_READ),
+    db: Session = Depends(get_db_session),
+) -> ClientSummary:
+    return ClientSummary(**client_service.client_summary(db, current_user.organization_id))
+
+
+@router.get("/options", response_model=list[ClientOption])
+def client_options(
+    search: str | None = None,
+    ids: list[uuid.UUID] = Query(default=[]),
+    limit: int = Query(default=20, ge=1, le=50),
+    current_user: CurrentUser = Depends(_READ),
+    db: Session = Depends(get_db_session),
+) -> list[ClientOption]:
+    """Lightweight id/name matches for type-to-search pickers."""
+    rows = client_service.client_options(db, current_user.organization_id, search=search, ids=ids, limit=limit)
+    return [ClientOption(id=cid, name=name) for cid, name in rows]
 
 
 @router.post("", response_model=ClientRead, status_code=201)

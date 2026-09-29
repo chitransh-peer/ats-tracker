@@ -17,6 +17,11 @@ class Job(TimestampMixin, AuditedByMixin, SoftDeleteMixin, Base):
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()
+    # The import that created this record, so that import can be undone.
+    # Null for everything entered by hand.
+    import_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("import_jobs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
     )
