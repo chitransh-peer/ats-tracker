@@ -77,6 +77,27 @@ def list_users(
     return [_to_read(u) for u in users]
 
 
+class UserOption(BaseModel):
+    id: uuid.UUID
+    full_name: str
+
+
+@router.get("/options", response_model=list[UserOption])
+def user_options(
+    current_user: CurrentUser = Depends(require_permission(PermissionResource.JOB, PermissionAction.READ)),
+    db: Session = Depends(get_db_session),
+) -> list[UserOption]:
+    """Names of the organization's active users, for the job form's owner
+    pickers (sales manager, recruiter...). Recruiters fill those in but cannot
+    read the user list itself, so this returns only id and name -- no email,
+    roles or account state."""
+    users = user_service.list_users(db, current_user.organization_id)
+    return sorted(
+        (UserOption(id=u.id, full_name=u.full_name) for u in users if u.is_active),
+        key=lambda o: o.full_name.lower(),
+    )
+
+
 @router.post("", response_model=InviteUserResponse, status_code=201)
 def invite_user(
     payload: InviteUserRequest,

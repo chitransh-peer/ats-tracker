@@ -145,11 +145,16 @@ export const EMPLOYMENT_LEVELS = [
 
 export const INTERVIEW_MODES = [
   "Telephonic",
-  "Video",
+  "Virtual Round",
   "In Person",
-  "Telephonic + Video",
-  "Video + In Person",
+  "Telephonic + Virtual Round",
+  "Virtual Round + In Person",
 ] as const;
+
+/** Jobs saved before "Video" was renamed "Virtual Round" keep the old text. */
+export function normalizeInterviewMode(mode: string | null | undefined): string {
+  return (mode ?? "").replace(/\bVideo\b/g, "Virtual Round");
+}
 
 export const DEGREE_OPTIONS = [
   "High School",

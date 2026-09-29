@@ -1,5 +1,6 @@
 "use client";
 
+import { interviewModeLabel } from "@/lib/api/interviews";
 import { useState } from "react";
 import Link from "next/link";
 import { AppShell, StatCard } from "@/components/layout/AppShell";
@@ -106,7 +107,7 @@ function ScheduleInterviewDialog() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Video">Video</SelectItem>
+                  <SelectItem value="Video">Virtual Round</SelectItem>
                   <SelectItem value="Phone">Phone</SelectItem>
                   <SelectItem value="Onsite">Onsite</SelectItem>
                 </SelectContent>
@@ -237,7 +238,7 @@ export function InterviewsClient() {
                     <td className="p-3 text-xs">
                       <span className="inline-flex items-center gap-1">
                         <Icon className="h-3 w-3" />
-                        {iv.mode}
+                        {interviewModeLabel(iv.mode)}
                       </span>
                     </td>
                     <td className="p-3">

@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class JobNoteCreate(BaseModel):
@@ -104,6 +104,42 @@ class JobSubmissionsSummary(BaseModel):
     counts: dict[str, int]
 
 
+def _check_job_numbers(job) -> None:
+    """Rules for values a person enters on the job form.
+
+    Applied to create and update only, never to JobRead: jobs saved before
+    these rules existed may break them, and must still load.
+    """
+    for key, label in (
+        ("pay_min", "Pay rate minimum"),
+        ("pay_max", "Pay rate maximum"),
+        ("client_bill_rate_min", "Client bill rate minimum"),
+        ("client_bill_rate_max", "Client bill rate maximum"),
+        ("turnaround_time_value", "Turnaround time"),
+        ("required_hours_per_week", "Required hours per week"),
+        ("experience_min_years", "Minimum experience"),
+        ("experience_max_years", "Maximum experience"),
+        ("max_allowed_submissions", "Maximum allowed submissions"),
+    ):
+        value = getattr(job, key, None)
+        if value is not None and value < 0:
+            raise ValueError(f"{label} cannot be negative.")
+    hours = getattr(job, "required_hours_per_week", None)
+    if hours is not None and hours > 168:
+        raise ValueError("Required hours per week cannot be more than 168.")
+    openings = getattr(job, "openings", None)
+    if openings is not None and openings < 1:
+        raise ValueError("A job needs at least one opening.")
+    for low, high, label in (
+        ("pay_min", "pay_max", "Pay rate"),
+        ("client_bill_rate_min", "client_bill_rate_max", "Client bill rate"),
+        ("experience_min_years", "experience_max_years", "Experience"),
+    ):
+        lo, hi = getattr(job, low, None), getattr(job, high, None)
+        if lo is not None and hi is not None and lo > hi:
+            raise ValueError(f"{label} minimum cannot be more than the maximum.")
+
+
 class JobBase(BaseModel):
     """Every writable field on a job posting."""
 
@@ -145,7 +181,8 @@ class JobBase(BaseModel):
 
     respond_by: str | None = None
     respond_by_date: date | None = None
-    turnaround_time_value: int | None = None
+    # Hours may be fractional (4:30 is stored as 4.5); days and weeks are whole.
+    turnaround_time_value: float | None = None
     turnaround_time_unit: str | None = None
 
     pay_rate_currency: str = "USD"
@@ -182,6 +219,11 @@ class JobCreate(JobBase):
     notes: list[JobNoteCreate] = Field(default_factory=list)
     custom_fields: list[JobCustomFieldCreate] = Field(default_factory=list)
     search_criteria: JobSearchCriteriaWrite | None = None
+
+    @model_validator(mode="after")
+    def _check_numbers(self):
+        _check_job_numbers(self)
+        return self
 
 
 class JobUpdate(BaseModel):
@@ -222,7 +264,8 @@ class JobUpdate(BaseModel):
 
     respond_by: str | None = None
     respond_by_date: date | None = None
-    turnaround_time_value: int | None = None
+    # Hours may be fractional (4:30 is stored as 4.5); days and weeks are whole.
+    turnaround_time_value: float | None = None
     turnaround_time_unit: str | None = None
 
     pay_rate_currency: str | None = None
@@ -251,6 +294,11 @@ class JobUpdate(BaseModel):
     primary_recruiter_id: uuid.UUID | None = None
     assigned_to_ids: list[uuid.UUID] | None = None
     comments: str | None = None
+
+    @model_validator(mode="after")
+    def _check_numbers(self):
+        _check_job_numbers(self)
+        return self
 
 
 class JobRead(JobBase):

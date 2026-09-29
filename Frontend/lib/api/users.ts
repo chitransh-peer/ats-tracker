@@ -1,6 +1,12 @@
 import { apiClient } from "./client";
 import type { InvitedUser, User } from "./types";
 
+/** Id and name of every active user; readable by anyone who can see jobs,
+ * for the job form's owner pickers. */
+export function listUserOptions() {
+  return apiClient.get<{ id: string; full_name: string }[]>("/users/options");
+}
+
 export function listUsers() {
   return apiClient.get<User[]>("/users");
 }

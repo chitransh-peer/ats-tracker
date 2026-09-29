@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeInterviewMode } from "@/lib/api/jobs";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -626,7 +627,7 @@ export function JobDetailClient() {
                           ? `${job.turnaround_time_value} ${job.turnaround_time_unit ?? ""}`
                           : null,
                       ],
-                      ["Interview Mode", job.interview_mode],
+                      ["Interview Mode", normalizeInterviewMode(job.interview_mode) || null],
                       ["Clearance", job.clearance_required ? "Yes" : "No"],
                       ["Employment Level", job.employment_level],
                       ["Employment Test Template", job.employment_test_template],

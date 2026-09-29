@@ -51,3 +51,10 @@ export function getInterview(interviewId: string) {
 export function getConsolidatedFeedback(interviewId: string) {
   return apiClient.get<ConsolidatedFeedback>(`/interviews/${interviewId}/consolidated-feedback`);
 }
+
+/** How an interview mode reads on screen. "Video" is stored for existing
+ * interviews and shown as "Virtual Round". */
+export function interviewModeLabel(mode: string | null | undefined): string {
+  if (!mode) return "";
+  return mode === "Video" ? "Virtual Round" : mode;
+}

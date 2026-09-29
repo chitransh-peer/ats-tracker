@@ -1,5 +1,6 @@
 "use client";
 
+import { interviewModeLabel } from "@/lib/api/interviews";
 import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -245,7 +246,7 @@ export function InterviewDetailClient() {
                 <div className="text-xs text-muted-foreground">Mode</div>
                 <div className="mt-0.5 flex items-center gap-1.5 text-sm font-medium">
                   <ModeIcon className="h-4 w-4" />
-                  {interview.mode}
+                  {interviewModeLabel(interview.mode)}
                 </div>
               </div>
               <div className="rounded-md border p-3">
