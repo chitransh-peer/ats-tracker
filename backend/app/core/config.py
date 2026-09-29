@@ -11,6 +11,15 @@ class Settings(BaseSettings):
     api_port: int = 8000
 
     database_url: str
+    # Connections each instance may hold. Multiplied by Cloud Run's
+    # --max-instances, the total must stay under the Cloud SQL instance's
+    # connection limit (about 22 usable on the smallest tier), or a traffic spike
+    # turns into every request failing at once. Defaults: 3 x (5 + 2) = 21.
+    db_pool_size: int = 5
+    db_max_overflow: int = 2
+    # Seconds a request waits for a free connection before failing, rather than
+    # hanging until Cloud Run's own timeout.
+    db_pool_timeout: int = 15
     redis_url: str = "redis://localhost:6379/0"
 
     jwt_secret: str
@@ -50,6 +59,10 @@ class Settings(BaseSettings):
     evaluation_skill_weight: float = 0.6
 
     cors_origins: str = "http://localhost:3000"
+
+    # How many proxies sit in front of the API and append to X-Forwarded-For.
+    # 0 = none (local), 1 = Cloud Run's own URL. See app/core/client_ip.py.
+    trusted_proxy_hops: int = 0
 
     # Public URL of the frontend. Used to build the links inside outbound email
     # (password reset, invitations), so it must be what recipients can reach —

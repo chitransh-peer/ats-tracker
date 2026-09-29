@@ -115,6 +115,7 @@ export function AuditPanel() {
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {new Date(log.created_at).toLocaleString()}
+                      {log.ip_address ? ` · IP ${log.ip_address}` : ""}
                     </div>
                   </div>
                 </li>

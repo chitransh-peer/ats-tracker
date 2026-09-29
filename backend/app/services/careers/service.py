@@ -1,5 +1,6 @@
 import uuid
 
+from fastapi import BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -52,6 +53,7 @@ def apply_to_job(
     resume_bytes: bytes | None,
     resume_file_name: str | None,
     resume_content_type: str | None,
+    background_tasks: BackgroundTasks,
 ):
     job = db.scalar(
         select(Job).where(Job.id == job_id, Job.organization_id == organization_id, Job.status == JobStatus.ACTIVE.value)
@@ -86,21 +88,23 @@ def apply_to_job(
     # Kick off AI review automatically so every careers-page applicant gets a score.
     # Imported here to avoid a service<->worker import cycle at module load.
     #
-    # Deliberately NOT allow_inline, unlike the recruiter-triggered endpoints in
-    # api/v1/routes/ai.py. A member of staff will wait half a minute for a score
-    # they asked for; a candidate submitting an application will not, and a form
-    # that hangs on an LLM call loses applicants and invites double submissions. Where
-    # no worker is deployed these stay unscored, and a recruiter can score them
-    # by hand from the application.
-    from app.workers.dispatch import dispatch
+    # After the response, not inline: a candidate submitting an application
+    # should get their confirmation at once, not wait half a minute on an LLM.
+    # With a worker deployed this is queued; without one it runs in this process
+    # once the response is out. Either way it happens -- the old behaviour on a
+    # deployment with no worker was to skip it and leave the applicant unscored.
+    from app.services.ai.recovery import resume_stalled_work
+    from app.workers.dispatch import dispatch_after_response
     from app.workers.tasks.ai import evaluate_application_task, parse_resume_task
 
     evaluation = create_pending_evaluation(db, organization_id=organization_id, application_id=application.id, actor_id=None)
     if document is not None:
         run = create_pending_run(db, organization_id=organization_id, candidate_id=candidate.id, document_id=document.id)
         # Parse first, then chain evaluation once the résumé text is available.
-        dispatch(parse_resume_task, str(run.id), str(evaluation.id))
+        dispatch_after_response(background_tasks, parse_resume_task, str(run.id), str(evaluation.id))
     else:
-        dispatch(evaluate_application_task, str(evaluation.id))
+        dispatch_after_response(background_tasks, evaluate_application_task, str(evaluation.id))
+    # And pick up any earlier applicant whose scoring was cut short.
+    background_tasks.add_task(resume_stalled_work)
 
     return application, candidate

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db_session
+from app.core.client_ip import client_ip
 from app.core.config import get_settings
 from app.core.enums import AuditAction, RoleName
 from app.core.exceptions import ForbiddenError, ValidationAppError
@@ -35,7 +36,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @limiter.limit("10/minute")
 def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db_session)) -> TokenPair:
     access_token, refresh_token = auth_service.login(
-        db, email=payload.email, password=payload.password, ip_address=request.client.host if request.client else None
+        db, email=payload.email, password=payload.password, ip_address=client_ip(request)
     )
     return TokenPair(access_token=access_token, refresh_token=refresh_token)
 

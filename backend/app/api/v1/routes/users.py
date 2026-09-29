@@ -6,7 +6,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session, require_permission, require_super_admin
-from app.core.enums import AuditAction, PermissionAction, PermissionResource
+from app.core.enums import AuditAction, PermissionAction, PermissionResource, RoleName
+from app.core.exceptions import ForbiddenError
 from app.schemas.auth import CurrentUser
 from app.schemas.user import AssignRolesRequest, UserRead, UserUpdate
 from app.services.audit.service import record as record_audit
@@ -38,6 +39,21 @@ class InviteUserResponse(BaseModel):
     expires_at: datetime
 
 
+def _guard_super_admin(current_user: CurrentUser, *, touches_super_admin: bool) -> None:
+    """Only a Super Admin may grant, remove, or otherwise change the Super Admin role.
+
+    Admins hold user:manage, which is enough to edit roles -- without this, an
+    Admin could promote itself, or deactivate the real Super Admin and take
+    over the organization.
+    """
+    if touches_super_admin and RoleName.SUPER_ADMIN.value not in current_user.roles:
+        raise ForbiddenError("Only a Super Admin can grant, change, or remove the Super Admin role.")
+
+
+def _is_super_admin(user) -> bool:
+    return RoleName.SUPER_ADMIN.value in user_service.role_names_for_user(user)
+
+
 def _to_read(user) -> UserRead:
     return UserRead(
         id=user.id,
@@ -67,6 +83,7 @@ def invite_user(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.USER, PermissionAction.CREATE)),
     db: Session = Depends(get_db_session),
 ) -> InviteUserResponse:
+    _guard_super_admin(current_user, touches_super_admin=payload.role_name == RoleName.SUPER_ADMIN.value)
     user, temporary_password = auth_service.invite_user(
         db,
         organization_id=current_user.organization_id,
@@ -116,6 +133,7 @@ def update_user(
     db: Session = Depends(get_db_session),
 ) -> UserRead:
     user = user_service.get_user_by_id(db, current_user.organization_id, user_id)
+    _guard_super_admin(current_user, touches_super_admin=_is_super_admin(user))
     user = user_service.update_user(db, user, full_name=payload.full_name, is_active=payload.is_active)
     return _to_read(user)
 
@@ -160,6 +178,10 @@ def assign_roles(
     db: Session = Depends(get_db_session),
 ) -> UserRead:
     user = user_service.get_user_by_id(db, current_user.organization_id, user_id)
+    _guard_super_admin(
+        current_user,
+        touches_super_admin=_is_super_admin(user) or RoleName.SUPER_ADMIN.value in payload.role_names,
+    )
     user = user_service.assign_roles(db, user, payload.role_names)
     record_audit(
         db,

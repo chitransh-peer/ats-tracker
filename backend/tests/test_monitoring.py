@@ -22,15 +22,11 @@ def _run_probe(code: str, env: dict[str, str] | None = None) -> subprocess.Compl
     import os
 
     full_env = {**os.environ, **(env or {})}
-    return subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, env=full_env, timeout=30
-    )
+    return subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=full_env, timeout=30)
 
 
 def test_app_boots_without_a_sentry_dsn_configured():
-    result = _run_probe(
-        "import app.main; print('OK')", env={"SENTRY_DSN": ""}
-    )
+    result = _run_probe("import app.main; print('OK')", env={"SENTRY_DSN": ""})
     assert result.returncode == 0, result.stderr
     assert "OK" in result.stdout
 
