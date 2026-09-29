@@ -58,6 +58,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # The frontend is served from a different origin, and browsers hide every
+    # non-standard response header from cross-origin scripts unless it is
+    # listed here. Without X-Total-Count the list pages could only count the
+    # page they had, so their pagers never offered a second page; without
+    # Content-Disposition downloads lose their filename.
+    expose_headers=["X-Total-Count", "Content-Disposition"],
 )
 
 app.state.limiter = limiter

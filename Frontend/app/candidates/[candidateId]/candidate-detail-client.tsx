@@ -73,7 +73,7 @@ function MessagesTab({
 }: {
   candidateId: string;
   candidateName: string;
-  candidateEmail: string;
+  candidateEmail: string | null;
   applications: Application[];
   jobById: Map<string, Job>;
 }) {
@@ -134,9 +134,11 @@ function MessagesTab({
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Compose message</CardTitle>
           <p className="text-xs text-muted-foreground">
-            {emailStatus?.enabled
-              ? `Sends to ${candidateEmail} and is recorded against the candidate.`
-              : `Email delivery isn't configured, so this is recorded as an outreach log rather than delivered to ${candidateEmail}.`}
+            {!candidateEmail
+              ? "This candidate has no email address (they were imported without one), so messages are recorded but can't be delivered. Re-import them with an email, choosing to update existing records, to fix this."
+              : emailStatus?.enabled
+                ? `Sends to ${candidateEmail} and is recorded against the candidate.`
+                : `Email delivery isn't configured, so this is recorded as an outreach log rather than delivered to ${candidateEmail}.`}
           </p>
         </CardHeader>
         <CardContent>

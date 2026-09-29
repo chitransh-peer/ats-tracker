@@ -34,7 +34,7 @@ class HotlistMemberRead(BaseModel):
     headline_override: str | None
     # Denormalised for display so the list renders without extra lookups.
     full_name: str
-    email: str
+    email: str | None
     marketing_title: str | None
     work_auth: str | None
     bench_age_days: int

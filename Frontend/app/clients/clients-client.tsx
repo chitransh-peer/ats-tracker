@@ -1,5 +1,6 @@
 "use client";
 
+import { ImportExportButtons } from "@/components/import-export";
 import { useState } from "react";
 import Link from "next/link";
 import { AppShell, StatCard } from "@/components/layout/AppShell";
@@ -11,7 +12,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Pager } from "@/components/ui/pager";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useClientSummary, useClientsPage } from "@/lib/hooks/use-clients";
-import { Plus, Search, Building2, Download } from "lucide-react";
+import { Plus, Search, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function statusTone(s: string) {
@@ -61,10 +62,7 @@ export function ClientsClient() {
       breadcrumbs={[{ label: "Home", to: "/" }, { label: "Clients" }]}
       actions={
         <>
-          <Button variant="outline" size="sm" className="gap-1">
-            <Download className="h-4 w-4" />
-            Export
-          </Button>
+          <ImportExportButtons entity="clients" label="Clients" />
           <Button size="sm" className="gap-1" asChild>
             <Link href="/clients/new">
               <Plus className="h-4 w-4" />

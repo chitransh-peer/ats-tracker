@@ -135,3 +135,19 @@ def test_bench_limit_opts_into_pagination_with_total(client, make_user, make_can
     assert response.status_code == 200
     assert len(response.json()) == 1
     assert int(response.headers["X-Total-Count"]) >= 3
+
+
+def test_the_total_count_header_is_readable_cross_origin(client, make_user, auth_headers):
+    """The frontend runs on another origin, so browsers hide X-Total-Count from
+    it unless CORS exposes it -- and without it every pager thinks the first
+    page is all there is."""
+    from app.core.config import get_settings
+    from app.core.enums import RoleName
+
+    user, password = make_user(role_names=[RoleName.RECRUITER.value])
+    origin = get_settings().cors_origin_list[0]
+
+    response = client.get("/api/v1/candidates", headers={**auth_headers(user.email, password), "Origin": origin})
+
+    exposed = {h.strip().lower() for h in response.headers["access-control-expose-headers"].split(",")}
+    assert {"x-total-count", "content-disposition"} <= exposed

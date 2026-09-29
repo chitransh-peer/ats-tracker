@@ -1,5 +1,6 @@
 "use client";
 
+import { ImportExportButtons } from "@/components/import-export";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AppShell, StatCard } from "@/components/layout/AppShell";
@@ -435,6 +436,7 @@ export function TalentBenchClient() {
               Hotlists
             </Link>
           </Button>
+          <ImportExportButtons entity="bench" label="Bench profiles" />
           {canEdit && <AddToBenchDialog />}
         </>
       }

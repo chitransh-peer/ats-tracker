@@ -1,5 +1,6 @@
 "use client";
 
+import { ImportExportButtons } from "@/components/import-export";
 import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -198,7 +199,12 @@ export function CandidatesClient() {
     <AppShell
       title="Candidates"
       breadcrumbs={[{ label: "Home", to: "/" }, { label: "Candidates" }]}
-      actions={<AddCandidateDialog />}
+      actions={
+        <>
+          <ImportExportButtons entity="candidates" label="Candidates" />
+          <AddCandidateDialog />
+        </>
+      }
     >
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
         <StatCard label="Total candidates" value={total} />

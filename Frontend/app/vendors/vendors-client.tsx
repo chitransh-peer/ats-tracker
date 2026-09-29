@@ -1,5 +1,6 @@
 "use client";
 
+import { ImportExportButtons } from "@/components/import-export";
 import { useState } from "react";
 import Link from "next/link";
 import { AppShell, StatCard } from "@/components/layout/AppShell";
@@ -9,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Pager } from "@/components/ui/pager";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useVendorSummary, useVendorsPage } from "@/lib/hooks/use-vendors";
-import { Plus, Search, Truck, Download } from "lucide-react";
+import { Plus, Search, Truck } from "lucide-react";
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -50,10 +51,7 @@ export function VendorsClient() {
       breadcrumbs={[{ label: "Home", to: "/" }, { label: "Vendors" }]}
       actions={
         <>
-          <Button variant="outline" size="sm" className="gap-1">
-            <Download className="h-4 w-4" />
-            Export
-          </Button>
+          <ImportExportButtons entity="vendors" label="Vendors" />
           <Button size="sm" className="gap-1" asChild>
             <Link href="/vendors/new">
               <Plus className="h-4 w-4" />

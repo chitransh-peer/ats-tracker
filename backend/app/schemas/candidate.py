@@ -81,7 +81,7 @@ class CandidateDocumentRead(BaseModel):
 class DuplicateWarning(BaseModel):
     candidate_id: uuid.UUID
     full_name: str
-    email: str
+    email: str | None
     match_reason: str
 
 
@@ -89,7 +89,8 @@ class CandidateRead(BaseModel):
     id: uuid.UUID
     organization_id: uuid.UUID
     full_name: str
-    email: str
+    # None only for candidates imported from another system without one.
+    email: str | None
     phone: str | None
     location: str | None
     current_company: str | None

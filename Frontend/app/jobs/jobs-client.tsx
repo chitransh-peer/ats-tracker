@@ -1,5 +1,6 @@
 "use client";
 
+import { ImportExportButtons } from "@/components/import-export";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AppShell, StatCard } from "@/components/layout/AppShell";
@@ -15,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Download } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function formatDateTime(value: string | null) {
@@ -82,10 +83,7 @@ export function JobsClient() {
       breadcrumbs={[{ label: "Home", to: "/" }, { label: "Jobs" }]}
       actions={
         <>
-          <Button variant="outline" size="sm" className="gap-1">
-            <Download className="h-4 w-4" />
-            Export
-          </Button>
+          <ImportExportButtons entity="jobs" label="Jobs" />
           <Button size="sm" asChild>
             <Link href="/jobs/new">
               <Plus className="h-4 w-4 mr-1" />

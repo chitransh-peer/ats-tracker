@@ -12,11 +12,22 @@ class Candidate(TimestampMixin, AuditedByMixin, SoftDeleteMixin, Base):
     __tablename__ = "candidates"
 
     id: Mapped[uuid.UUID] = uuid_pk()
+    # The import that created this record, so that import can be undone.
+    # Null for everything entered by hand.
+    import_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("import_jobs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
     )
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    # Optional: records imported from another system do not always have one.
+    # Every candidate created through the app or the careers page still does.
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    # The candidate's id in the system they were imported from (e.g. a Ceipal
+    # Applicant ID), so re-importing the same export matches instead of
+    # duplicating.
+    external_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     current_company: Mapped[str | None] = mapped_column(String(255), nullable=True)
