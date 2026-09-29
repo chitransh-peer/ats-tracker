@@ -20,12 +20,13 @@ import {
 } from "@/components/ui/select";
 import { useCreateJob, useUpdateJob } from "@/lib/hooks/use-jobs";
 import { EntityPicker } from "@/components/entity-picker";
-import { useUsers } from "@/lib/hooks/use-users";
+import { useUserOptions } from "@/lib/hooks/use-users";
 import {
   CURRENCIES,
   DEGREE_OPTIONS,
   EMPLOYMENT_LEVELS,
   INTERVIEW_MODES,
+  normalizeInterviewMode,
   JOB_REQUIRED_DOCUMENTS,
   JOB_TYPES,
   RATE_TYPES,
@@ -38,6 +39,7 @@ import {
 } from "@/lib/api/jobs";
 import { COUNTRIES } from "@/lib/api/clients";
 import { ApiError } from "@/lib/api/client";
+import { NumberInput } from "@/components/number-input";
 import type { Job, JobCreateInput } from "@/lib/api/types";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -45,6 +47,87 @@ import { cn } from "@/lib/utils";
 const NONE = "__none__";
 
 type FormState = JobCreateInput & { title: string };
+
+function todayIso(): string {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+/** The number rules the server also enforces, caught before the round trip. */
+function checkNumbers(form: FormState, job?: Job): string | null {
+  const num = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
+  const pairs: [unknown, unknown, string][] = [
+    [form.pay_min, form.pay_max, "Pay rate"],
+    [form.client_bill_rate_min, form.client_bill_rate_max, "Client bill rate"],
+    [form.experience_min_years, form.experience_max_years, "Experience"],
+  ];
+  for (const [low, high, label] of pairs) {
+    const lo = num(low);
+    const hi = num(high);
+    if (lo !== null && hi !== null && lo > hi)
+      return `${label} minimum cannot be more than the maximum.`;
+  }
+  if (
+    form.respond_by === "Specific Date" &&
+    form.respond_by_date &&
+    form.respond_by_date < todayIso() &&
+    form.respond_by_date !== job?.respond_by_date
+  ) {
+    return "The respond-by date cannot be in the past.";
+  }
+  return null;
+}
+
+/** 4.5 -> "4:30". */
+function toHoursMinutes(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "";
+  const hours = Math.floor(value);
+  const minutes = Math.round((value - hours) * 60);
+  return minutes ? `${hours}:${String(minutes).padStart(2, "0")}` : String(hours);
+}
+
+/**
+ * Turnaround in hours, typed as "4" or "4:30". Stored as fractional hours
+ * (4.5), so the value keeps its minutes.
+ */
+function HoursMinutesInput({
+  value,
+  onValueChange,
+}: {
+  value: number | null | undefined;
+  onValueChange: (value: number | null) => void;
+}) {
+  const [text, setText] = useState(() => toHoursMinutes(value));
+  const [invalid, setInvalid] = useState(false);
+
+  return (
+    <div>
+      <Input
+        inputMode="numeric"
+        placeholder="hh:mm"
+        value={text}
+        aria-invalid={invalid}
+        className={cn(invalid && "border-destructive")}
+        onChange={(e) => {
+          const next = e.target.value.replace(/[^\d:]/g, "").replace(/:(?=.*:)/g, "");
+          setText(next);
+          const match = next.match(/^(\d{1,4})(?::(\d{0,2}))?$/);
+          if (!next) {
+            setInvalid(false);
+            onValueChange(null);
+          } else if (match && Number(match[2] || 0) < 60) {
+            setInvalid(false);
+            const minutes = Number(match[2] || 0);
+            onValueChange(Math.round((Number(match[1]) + minutes / 60) * 100) / 100);
+          } else {
+            setInvalid(true);
+          }
+        }}
+      />
+      {invalid && <p className="mt-1 text-xs text-destructive">Use hours:minutes, e.g. 4:30.</p>}
+    </div>
+  );
+}
 
 function initialState(job?: Job): FormState {
   return {
@@ -61,7 +144,7 @@ function initialState(job?: Job): FormState {
     priority: job?.priority ?? "Medium",
     duration: job?.duration ?? "",
     required_hours_per_week: job?.required_hours_per_week ?? 40,
-    interview_mode: job?.interview_mode ?? "",
+    interview_mode: normalizeInterviewMode(job?.interview_mode),
     clearance_required: job?.clearance_required ?? false,
     additional_details: job?.additional_details ?? "",
     employment_test_template: job?.employment_test_template ?? "",
@@ -312,7 +395,8 @@ export function JobForm({ job }: { job?: Job }) {
   const isEdit = Boolean(job);
   const createJob = useCreateJob();
   const updateJob = useUpdateJob(job?.id ?? "");
-  const { data: users } = useUsers();
+  // Names only, so recruiters -- who create and post jobs -- can fill these in.
+  const { data: users } = useUserOptions();
 
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(() => initialState(job));
@@ -357,6 +441,11 @@ export function JobForm({ job }: { job?: Job }) {
     }
     if (!form.required_skills?.length) {
       setError("At least one primary skill is required.");
+      return;
+    }
+    const problem = checkNumbers(form, job);
+    if (problem) {
+      setError(problem);
       return;
     }
 
@@ -478,19 +567,17 @@ export function JobForm({ job }: { job?: Job }) {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Input
-                    type="number"
-                    step="0.01"
+                  <NumberInput
+                    decimals={2}
                     placeholder="Min"
-                    value={form.client_bill_rate_min ?? ""}
-                    onChange={(e) => set("client_bill_rate_min", e.target.value || null)}
+                    value={form.client_bill_rate_min}
+                    onValueChange={(v) => set("client_bill_rate_min", v)}
                   />
-                  <Input
-                    type="number"
-                    step="0.01"
+                  <NumberInput
+                    decimals={2}
                     placeholder="Max"
-                    value={form.client_bill_rate_max ?? ""}
-                    onChange={(e) => set("client_bill_rate_max", e.target.value || null)}
+                    value={form.client_bill_rate_max}
+                    onValueChange={(v) => set("client_bill_rate_max", v)}
                   />
                   <Select
                     value={form.client_bill_rate_unit ?? "Hourly"}
@@ -535,17 +622,15 @@ export function JobForm({ job }: { job?: Job }) {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Input
-                    type="number"
+                  <NumberInput
                     placeholder="Min"
-                    value={form.pay_min ?? ""}
-                    onChange={(e) => set("pay_min", e.target.value ? Number(e.target.value) : null)}
+                    value={form.pay_min}
+                    onValueChange={(v) => set("pay_min", v === null ? null : Number(v))}
                   />
-                  <Input
-                    type="number"
+                  <NumberInput
                     placeholder="Max"
-                    value={form.pay_max ?? ""}
-                    onChange={(e) => set("pay_max", e.target.value ? Number(e.target.value) : null)}
+                    value={form.pay_max}
+                    onValueChange={(v) => set("pay_max", v === null ? null : Number(v))}
                   />
                   <Select
                     value={form.pay_rate_unit ?? "Hourly"}
@@ -595,6 +680,7 @@ export function JobForm({ job }: { job?: Job }) {
                   <Field label="Respond by date">
                     <Input
                       type="date"
+                      min={todayIso()}
                       value={form.respond_by_date ?? ""}
                       onChange={(e) => set("respond_by_date", e.target.value || null)}
                     />
@@ -682,12 +768,11 @@ export function JobForm({ job }: { job?: Job }) {
 
             <div className="grid lg:grid-cols-3 gap-4">
               <Field label="Required Hours/Week">
-                <Input
-                  type="number"
-                  min={0}
-                  value={form.required_hours_per_week ?? ""}
-                  onChange={(e) =>
-                    set("required_hours_per_week", e.target.value ? Number(e.target.value) : null)
+                <NumberInput
+                  max={168}
+                  value={form.required_hours_per_week}
+                  onValueChange={(v) =>
+                    set("required_hours_per_week", v === null ? null : Number(v))
                   }
                 />
               </Field>
@@ -719,17 +804,34 @@ export function JobForm({ job }: { job?: Job }) {
               </Field>
               <Field label="Turnaround Time" required>
                 <div className="grid grid-cols-2 gap-2">
-                  <Input
-                    type="number"
-                    min={0}
-                    value={form.turnaround_time_value ?? ""}
-                    onChange={(e) =>
-                      set("turnaround_time_value", e.target.value ? Number(e.target.value) : null)
-                    }
-                  />
+                  {form.turnaround_time_unit === "In Hours" ? (
+                    <HoursMinutesInput
+                      value={form.turnaround_time_value}
+                      onValueChange={(v) => set("turnaround_time_value", v)}
+                    />
+                  ) : (
+                    <NumberInput
+                      value={
+                        form.turnaround_time_value === null ||
+                        form.turnaround_time_value === undefined
+                          ? null
+                          : Math.round(form.turnaround_time_value)
+                      }
+                      onValueChange={(v) =>
+                        set("turnaround_time_value", v === null ? null : Number(v))
+                      }
+                    />
+                  )}
                   <Select
                     value={form.turnaround_time_unit ?? "In Days"}
-                    onValueChange={(v) => set("turnaround_time_unit", v)}
+                    onValueChange={(v) => {
+                      set("turnaround_time_unit", v);
+                      // Days and weeks are whole: 4:30 hours must not become 4.5 days.
+                      const current = form.turnaround_time_value;
+                      if (v !== "In Hours" && current !== null && current !== undefined) {
+                        set("turnaround_time_value", Math.round(current));
+                      }
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue />

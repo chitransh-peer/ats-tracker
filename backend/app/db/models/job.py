@@ -77,7 +77,8 @@ class Job(TimestampMixin, AuditedByMixin, SoftDeleteMixin, Base):
     # Respond-by / turnaround
     respond_by: Mapped[str | None] = mapped_column(String(50), nullable=True)
     respond_by_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    turnaround_time_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Fractional for hours (4:30 is 4.5); whole for days and weeks.
+    turnaround_time_value: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)
     turnaround_time_unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Rates — `pay_min`/`pay_max` above hold the candidate-facing pay range.

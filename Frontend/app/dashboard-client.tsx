@@ -1,5 +1,6 @@
 "use client";
 
+import { interviewModeLabel } from "@/lib/api/interviews";
 import Link from "next/link";
 import { AppShell, StatCard } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -246,7 +247,7 @@ export function DashboardClient() {
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-medium">{iv.round_name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {candidate?.full_name ?? "Unknown"} · {iv.mode}
+                          {candidate?.full_name ?? "Unknown"} · {interviewModeLabel(iv.mode)}
                         </div>
                         <div className="text-[11px] text-muted-foreground mt-1">
                           <Clock className="inline h-3 w-3 mr-1" />

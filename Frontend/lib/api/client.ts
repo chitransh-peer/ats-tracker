@@ -15,6 +15,22 @@ export class ApiError extends Error {
   }
 }
 
+/** FastAPI sends a plain string for most errors but a list of
+ * {loc, msg} objects when a request fails validation; turn either into a
+ * sentence rather than "[object Object]". */
+function describeDetail(detail: unknown): string {
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((d) =>
+        d && typeof d === "object" && "msg" in d ? String((d as { msg: unknown }).msg) : "",
+      )
+      .map((m) => m.replace(/^Value error, /, ""))
+      .filter(Boolean);
+    return messages.length ? messages.join(" ") : "Some of the values entered are not valid.";
+  }
+  return String(detail);
+}
+
 export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(ACCESS_TOKEN_KEY);
@@ -179,7 +195,7 @@ async function request<T>(
     }
     const message =
       detail && typeof detail === "object" && "detail" in detail
-        ? String((detail as { detail: unknown }).detail)
+        ? describeDetail((detail as { detail: unknown }).detail)
         : res.statusText;
     throw new ApiError(res.status, detail, message);
   }

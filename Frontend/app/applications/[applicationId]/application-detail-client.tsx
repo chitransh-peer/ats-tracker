@@ -1,5 +1,6 @@
 "use client";
 
+import { interviewModeLabel } from "@/lib/api/interviews";
 import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -311,7 +312,7 @@ export function ApplicationDetailClient() {
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium">{iv.round_name}</div>
                       <div className="text-xs text-muted-foreground">
-                        {formatDateTime(iv.scheduled_at)} · {iv.mode}
+                        {formatDateTime(iv.scheduled_at)} · {interviewModeLabel(iv.mode)}
                       </div>
                     </div>
                     <Badge variant="secondary" className="text-[10px] shrink-0">
