@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.core.enums import (
@@ -24,29 +24,46 @@ from app.services.pipeline.service import get_default_stage_template
 
 
 def funnel(db: Session, organization_id: uuid.UUID) -> list[dict]:
+    """How many applications reached each stage of the default template.
+
+    An application counts toward every stage up to the furthest it ever got
+    to, whether it is there now or moved on, so the history counts as well as
+    the current stage. Computed by the database in one query: loading every
+    application and its history to do this in Python failed at ~65,000.
+    """
     template = get_default_stage_template(db, organization_id)
     if template is None:
         return []
     stages = sorted(template.stages, key=lambda s: s.sort_order)
 
-    applications = list(db.scalars(select(Application).where(Application.organization_id == organization_id)).all())
-    max_reached: dict[uuid.UUID, int] = {}
-    stage_order_by_id = {s.id: s.sort_order for s in stages}
-
-    for app_row in applications:
-        reached = stage_order_by_id.get(app_row.current_stage_id, -1)
-        max_reached[app_row.id] = reached
-
-    history_rows = db.scalars(
-        select(ApplicationStageHistory).where(ApplicationStageHistory.application_id.in_([a.id for a in applications]))
-    ).all()
-    for row in history_rows:
-        order = stage_order_by_id.get(row.to_stage_id)
-        if order is not None:
-            max_reached[row.application_id] = max(max_reached.get(row.application_id, -1), order)
+    # Only this template's stages carry an order; a stage from another template
+    # joins to nothing and counts as "not reached" (-1).
+    template_stage = (
+        select(StageTemplateStage.id, StageTemplateStage.sort_order)
+        .where(StageTemplateStage.template_id == template.id)
+        .subquery()
+    )
+    current_stage = template_stage.alias("current_stage")
+    history_stage = template_stage.alias("history_stage")
+    reached = (
+        select(
+            func.greatest(
+                func.coalesce(func.max(current_stage.c.sort_order), -1),
+                func.coalesce(func.max(history_stage.c.sort_order), -1),
+            ).label("reached")
+        )
+        .select_from(Application)
+        .outerjoin(current_stage, current_stage.c.id == Application.current_stage_id)
+        .outerjoin(ApplicationStageHistory, ApplicationStageHistory.application_id == Application.id)
+        .outerjoin(history_stage, history_stage.c.id == ApplicationStageHistory.to_stage_id)
+        .where(Application.organization_id == organization_id)
+        .group_by(Application.id)
+        .subquery()
+    )
+    counts = db.execute(select(reached.c.reached, func.count()).group_by(reached.c.reached)).all()
 
     return [
-        {"stage": stage.name, "value": sum(1 for reached in max_reached.values() if reached >= stage.sort_order)}
+        {"stage": stage.name, "value": sum(count for order, count in counts if order >= stage.sort_order)}
         for stage in stages
     ]
 
@@ -61,55 +78,42 @@ def source_effectiveness(db: Session, organization_id: uuid.UUID) -> list[dict]:
 
 
 def recruiter_performance(db: Session, organization_id: uuid.UUID) -> list[dict]:
+    """Per recruiter with at least one open job: open jobs, and applications
+    and hires across all their jobs. One grouped query, not three per recruiter."""
+    open_jobs = func.count(func.distinct(Job.id)).filter(Job.status == JobStatus.ACTIVE.value)
     rows = db.execute(
-        select(Job.recruiter_id, User.full_name, func.count(Job.id))
+        select(
+            Job.recruiter_id,
+            User.full_name,
+            open_jobs,
+            func.count(Application.id),
+            func.count(Application.id).filter(Application.status == ApplicationStatus.HIRED.value),
+        )
         .join(User, User.id == Job.recruiter_id)
-        .where(Job.organization_id == organization_id, Job.status == JobStatus.ACTIVE.value)
+        .outerjoin(Application, Application.job_id == Job.id)
+        .where(Job.organization_id == organization_id)
         .group_by(Job.recruiter_id, User.full_name)
+        .having(open_jobs > 0)
     ).all()
-
-    results = []
-    for recruiter_id, full_name, open_jobs in rows:
-        applications = (
-            db.scalar(
-                select(func.count(Application.id))
-                .join(Job, Job.id == Application.job_id)
-                .where(Job.recruiter_id == recruiter_id, Job.organization_id == organization_id)
-            )
-            or 0
-        )
-        hires = (
-            db.scalar(
-                select(func.count(Application.id))
-                .join(Job, Job.id == Application.job_id)
-                .where(
-                    Job.recruiter_id == recruiter_id,
-                    Job.organization_id == organization_id,
-                    Application.status == ApplicationStatus.HIRED.value,
-                )
-            )
-            or 0
-        )
-        results.append(
-            {
-                "recruiter_id": recruiter_id,
-                "recruiter_name": full_name,
-                "open_jobs": open_jobs,
-                "applications": applications,
-                "hires": hires,
-            }
-        )
-    return results
+    return [
+        {
+            "recruiter_id": recruiter_id,
+            "recruiter_name": full_name,
+            "open_jobs": open_count,
+            "applications": applications,
+            "hires": hires,
+        }
+        for recruiter_id, full_name, open_count, applications, hires in rows
+    ]
 
 
 def aging_jobs(db: Session, organization_id: uuid.UUID) -> list[dict]:
-    jobs = list(
-        db.scalars(
-            select(Job)
-            .where(Job.organization_id == organization_id, Job.status == JobStatus.ACTIVE.value)
-            .order_by(Job.posted_at)
-        ).all()
-    )
+    # The four columns shown, not whole job rows.
+    jobs = db.execute(
+        select(Job.id, Job.title, Job.status, Job.posted_at)
+        .where(Job.organization_id == organization_id, Job.status == JobStatus.ACTIVE.value, Job.deleted_at.is_(None))
+        .order_by(Job.posted_at)
+    ).all()
     now = datetime.now(UTC)
     return [
         {
@@ -124,8 +128,11 @@ def aging_jobs(db: Session, organization_id: uuid.UUID) -> list[dict]:
 
 
 def time_to_fill(db: Session, organization_id: uuid.UUID) -> dict:
-    hired_events = db.execute(
-        select(Job.posted_at, ApplicationStageHistory.created_at)
+    """Average whole days from a job being posted to each hire on it."""
+    days = func.floor(func.extract("epoch", ApplicationStageHistory.created_at - Job.posted_at) / 86400)
+    average, count = db.execute(
+        select(func.avg(days), func.count())
+        .select_from(ApplicationStageHistory)
         .join(Application, Application.id == ApplicationStageHistory.application_id)
         .join(Job, Job.id == Application.job_id)
         .join(StageTemplateStage, StageTemplateStage.id == ApplicationStageHistory.to_stage_id)
@@ -134,20 +141,14 @@ def time_to_fill(db: Session, organization_id: uuid.UUID) -> dict:
             StageTemplateStage.terminal_outcome == TerminalOutcome.HIRED.value,
             Job.posted_at.is_not(None),
         )
-    ).all()
-
-    days = [(hired_at - posted_at).days for posted_at, hired_at in hired_events if posted_at and hired_at]
+    ).one()
     return {
-        "average_days": sum(days) / len(days) if days else None,
-        "filled_jobs_count": len(days),
+        "average_days": float(average) if average is not None else None,
+        "filled_jobs_count": count,
     }
 
 
 _TREND_MONTHS = 12
-
-
-def _month_key(value: datetime) -> str:
-    return value.strftime("%Y-%m")
 
 
 def _recent_month_keys(count: int = _TREND_MONTHS) -> list[str]:
@@ -163,44 +164,44 @@ def _recent_month_keys(count: int = _TREND_MONTHS) -> list[str]:
     return list(reversed(keys))
 
 
+def _count_by_month(db: Session, column, query) -> dict[str, int]:
+    """{"YYYY-MM": count} for `query`, bucketed on `column` in UTC."""
+    month = func.to_char(func.timezone("UTC", column), "YYYY-MM")
+    return dict(db.execute(query.add_columns(month, func.count()).group_by(month)).all())
+
+
 def hiring_trend(db: Session, organization_id: uuid.UUID) -> list[dict]:
-    """Offers created vs. hires made, bucketed by month over the last year."""
+    """Offers created vs. hires made, bucketed by month over the last year.
+    The database counts per month, so only twelve rows per series come back."""
     months = _recent_month_keys()
     window_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(
         days=31 * (_TREND_MONTHS - 1)
     )
 
-    offers_by_month: dict[str, int] = {key: 0 for key in months}
-    hires_by_month: dict[str, int] = {key: 0 for key in months}
-
-    offer_dates = db.scalars(
-        select(Offer.created_at).where(Offer.organization_id == organization_id, Offer.created_at >= window_start)
-    ).all()
-    for created_at in offer_dates:
-        key = _month_key(created_at)
-        if key in offers_by_month:
-            offers_by_month[key] += 1
-
-    hire_dates = db.scalars(
-        select(ApplicationStageHistory.created_at)
+    offers_by_month = _count_by_month(
+        db,
+        Offer.created_at,
+        select().select_from(Offer).where(Offer.organization_id == organization_id, Offer.created_at >= window_start),
+    )
+    hires_by_month = _count_by_month(
+        db,
+        ApplicationStageHistory.created_at,
+        select()
+        .select_from(ApplicationStageHistory)
         .join(Application, Application.id == ApplicationStageHistory.application_id)
         .join(StageTemplateStage, StageTemplateStage.id == ApplicationStageHistory.to_stage_id)
         .where(
             Application.organization_id == organization_id,
             StageTemplateStage.terminal_outcome == TerminalOutcome.HIRED.value,
             ApplicationStageHistory.created_at >= window_start,
-        )
-    ).all()
-    for created_at in hire_dates:
-        key = _month_key(created_at)
-        if key in hires_by_month:
-            hires_by_month[key] += 1
+        ),
+    )
 
     return [
         {
             "month": datetime.strptime(key, "%Y-%m").strftime("%b %Y"),
-            "offers": offers_by_month[key],
-            "hires": hires_by_month[key],
+            "offers": offers_by_month.get(key, 0),
+            "hires": hires_by_month.get(key, 0),
         }
         for key in months
     ]
@@ -216,30 +217,25 @@ _SCORE_BUCKETS: list[tuple[str, float, float]] = [
 
 
 def score_distribution(db: Session, organization_id: uuid.UUID) -> list[dict]:
-    """Distribution of the latest AI overall score per application."""
-    rows = db.execute(
-        select(AIEvaluation.application_id, AIEvaluation.version, AIEvaluation.overall_score)
+    """Distribution of the latest completed AI overall score per application,
+    bucketed by the database rather than by loading every evaluation."""
+    latest = (
+        select(AIEvaluation.overall_score.label("score"))
         .where(
             AIEvaluation.organization_id == organization_id,
             AIEvaluation.status == AIEvaluationStatus.COMPLETED.value,
             AIEvaluation.overall_score.is_not(None),
         )
-        .order_by(AIEvaluation.application_id, AIEvaluation.version)
-    ).all()
-
-    # Rows are version-ordered, so the last write per application is the latest evaluation.
-    latest: dict[uuid.UUID, float] = {}
-    for application_id, _version, overall_score in rows:
-        latest[application_id] = float(overall_score)
-
-    counts = {label: 0 for label, _lo, _hi in _SCORE_BUCKETS}
-    for score in latest.values():
-        for label, low, high in _SCORE_BUCKETS:
-            if low <= score < high:
-                counts[label] += 1
-                break
-
-    return [{"bucket": label, "count": counts[label]} for label, _lo, _hi in _SCORE_BUCKETS]
+        .distinct(AIEvaluation.application_id)
+        .order_by(AIEvaluation.application_id, AIEvaluation.version.desc())
+        .subquery()
+    )
+    bucket = case(
+        *[((latest.c.score >= low) & (latest.c.score < high), label) for label, low, high in _SCORE_BUCKETS],
+        else_=None,
+    )
+    counts = dict(db.execute(select(bucket, func.count()).group_by(bucket)).all())
+    return [{"bucket": label, "count": counts.get(label, 0)} for label, _lo, _hi in _SCORE_BUCKETS]
 
 
 def offer_metrics(db: Session, organization_id: uuid.UUID) -> dict:

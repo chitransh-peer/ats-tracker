@@ -111,3 +111,94 @@ def test_executive_dashboard_totals(client, make_user, make_job, make_candidate,
     assert body["total_open_jobs"] == 1
     assert body["total_candidates"] == 1
     assert "funnel" in body
+
+
+def test_recruiter_performance_counts_across_all_their_jobs(db, organization, make_user, make_job, make_candidate):
+    from app.core.enums import JobStatus
+    from app.services.applications.service import create_application
+    from app.services.reports import service as report_service
+
+    recruiter, _ = make_user(role_names=[RoleName.RECRUITER.value])
+    idle_recruiter, _ = make_user(role_names=[RoleName.RECRUITER.value])
+    open_job = make_job(recruiter_id=recruiter.id)
+    closed_job = make_job(recruiter_id=recruiter.id)
+    make_job(recruiter_id=idle_recruiter.id)  # draft only: not listed
+    open_job.status = JobStatus.ACTIVE.value
+    closed_job.status = JobStatus.CLOSED.value
+    db.commit()
+    for job in (open_job, open_job, closed_job):
+        create_application(db, organization_id=organization.id, candidate_id=make_candidate().id, job_id=job.id, source=None)
+    hired = create_application(
+        db, organization_id=organization.id, candidate_id=make_candidate().id, job_id=closed_job.id, source=None
+    )
+    hired.status = "Hired"
+    db.commit()
+
+    rows = report_service.recruiter_performance(db, organization.id)
+
+    assert rows == [
+        {"recruiter_id": recruiter.id, "recruiter_name": recruiter.full_name, "open_jobs": 1, "applications": 4, "hires": 1}
+    ]
+
+
+def test_score_distribution_uses_each_applications_latest_completed_score(
+    db, organization, make_job, make_candidate, make_application
+):
+    from app.db.models.ai import AIEvaluation
+    from app.services.reports import service as report_service
+
+    job = make_job()
+    first = make_application(candidate=make_candidate(), job=job)
+    second = make_application(candidate=make_candidate(), job=job)
+    db.add_all(
+        [
+            AIEvaluation(
+                organization_id=organization.id, application_id=first.id, version=1, status="completed", overall_score=20
+            ),
+            AIEvaluation(
+                organization_id=organization.id, application_id=first.id, version=2, status="completed", overall_score=95
+            ),
+            AIEvaluation(
+                organization_id=organization.id, application_id=second.id, version=1, status="completed", overall_score=60
+            ),
+            AIEvaluation(
+                organization_id=organization.id, application_id=second.id, version=2, status="failed", overall_score=None
+            ),
+        ]
+    )
+    db.commit()
+
+    buckets = {b["bucket"]: b["count"] for b in report_service.score_distribution(db, organization.id)}
+
+    assert buckets == {"0-39": 0, "40-59": 0, "60-74": 1, "75-89": 0, "90-100": 1}
+
+
+def test_hiring_trend_and_time_to_fill(client, db, organization, make_user, make_job, make_candidate, auth_headers):
+    from datetime import UTC, datetime, timedelta
+
+    from app.db.models.offer import Offer
+    from app.services.reports import service as report_service
+
+    user, password = make_user(role_names=[RoleName.RECRUITER.value])
+    headers = auth_headers(user.email, password)
+    job = make_job()
+    job.posted_at = datetime.now(UTC) - timedelta(days=10, hours=1)
+    db.commit()
+    application = client.post(
+        "/api/v1/applications", json={"candidate_id": str(make_candidate().id), "job_id": str(job.id)}, headers=headers
+    ).json()
+    client.post(
+        f"/api/v1/applications/{application['id']}/move-stage",
+        json={"to_stage_id": _stage_id(client, headers, "Hired")},
+        headers=headers,
+    )
+    db.add(Offer(organization_id=organization.id, application_id=application["id"], base_salary=90000))
+    db.commit()
+
+    trend = report_service.hiring_trend(db, organization.id)
+    fill = report_service.time_to_fill(db, organization.id)
+
+    assert len(trend) == 12
+    assert trend[-1] == {"month": datetime.now(UTC).strftime("%b %Y"), "offers": 1, "hires": 1}
+    assert sum(point["offers"] for point in trend[:-1]) == 0
+    assert fill == {"average_days": 10.0, "filled_jobs_count": 1}
