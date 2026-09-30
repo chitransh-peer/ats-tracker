@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { AppShell, StatCard } from "@/components/layout/AppShell";
-import { useOnboardingCases, useOnboardingActions } from "@/lib/hooks/use-onboarding";
-import { useApplications } from "@/lib/hooks/use-applications";
-import { useCandidates } from "@/lib/hooks/use-candidates";
-import { useJobs } from "@/lib/hooks/use-jobs";
+import {
+  useOnboardingActions,
+  useOnboardingCasesPage,
+  useOnboardingSummary,
+} from "@/lib/hooks/use-onboarding";
+import { Pager } from "@/components/ui/pager";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -205,19 +207,14 @@ function CaseCard({
   );
 }
 
+const PAGE_SIZE = 20;
+
 export function OnboardingClient() {
-  const { data: cases, isLoading } = useOnboardingCases();
-  const { data: applications } = useApplications();
-  const { data: candidates } = useCandidates();
-  const { data: jobs } = useJobs();
-
-  const applicationById = new Map((applications ?? []).map((a) => [a.id, a]));
-  const candidateById = new Map((candidates ?? []).map((c) => [c.id, c]));
-  const jobById = new Map((jobs ?? []).map((j) => [j.id, j]));
-
-  const inProgress = cases?.filter((c) => c.status === "In Progress").length ?? 0;
-  const completed = cases?.filter((c) => c.status === "Completed").length ?? 0;
-  const cancelled = cases?.filter((c) => c.status === "Cancelled").length ?? 0;
+  const [offset, setOffset] = useState(0);
+  // Paged, named and counted by the server; see the interviews page.
+  const { data, isLoading } = useOnboardingCasesPage({ limit: PAGE_SIZE, offset });
+  const { data: summary } = useOnboardingSummary();
+  const cases = data?.data;
 
   return (
     <AppShell
@@ -225,9 +222,9 @@ export function OnboardingClient() {
       breadcrumbs={[{ label: "Home", to: "/" }, { label: "Onboarding" }]}
     >
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
-        <StatCard label="In progress" value={inProgress} />
-        <StatCard label="Completed" value={completed} tone="success" />
-        <StatCard label="Cancelled" value={cancelled} />
+        <StatCard label="In progress" value={summary?.in_progress ?? 0} />
+        <StatCard label="Completed" value={summary?.completed ?? 0} tone="success" />
+        <StatCard label="Cancelled" value={summary?.cancelled ?? 0} />
       </div>
 
       {isLoading && <div className="text-sm text-muted-foreground">Loading…</div>}
@@ -240,20 +237,21 @@ export function OnboardingClient() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {cases?.map((c) => {
-          const application = applicationById.get(c.application_id);
-          const candidate = application ? candidateById.get(application.candidate_id) : undefined;
-          const job = application ? jobById.get(application.job_id) : undefined;
-          return (
-            <CaseCard
-              key={c.id}
-              onboardingCase={c}
-              candidateName={candidate?.full_name ?? "Unknown candidate"}
-              jobTitle={job?.title ?? "—"}
-            />
-          );
-        })}
+        {cases?.map((c) => (
+          <CaseCard
+            key={c.id}
+            onboardingCase={c}
+            candidateName={c.candidate_name ?? "Unknown candidate"}
+            jobTitle={c.job_title ?? "—"}
+          />
+        ))}
       </div>
+      <Pager
+        offset={offset}
+        limit={PAGE_SIZE}
+        total={data?.total ?? 0}
+        onOffsetChange={setOffset}
+      />
     </AppShell>
   );
 }

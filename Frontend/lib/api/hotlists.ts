@@ -8,8 +8,22 @@ import type {
   RecipientImportResult,
 } from "./types";
 
-export function listHotlists(status?: string) {
-  return apiClient.get<HotlistListItem[]>(`/hotlists${status ? `?status=${status}` : ""}`);
+export interface HotlistFilters {
+  status?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** One page of hotlists plus the total matching, for a pager. */
+export function listHotlistsPage(filters: HotlistFilters = {}) {
+  const query = new URLSearchParams();
+  if (filters.status) query.set("status", filters.status);
+  if (filters.search) query.set("search", filters.search);
+  if (filters.limit) query.set("limit", String(filters.limit));
+  if (filters.offset) query.set("offset", String(filters.offset));
+  const qs = query.toString();
+  return apiClient.getPage<HotlistListItem>(`/hotlists${qs ? `?${qs}` : ""}`);
 }
 
 export function getHotlist(hotlistId: string) {

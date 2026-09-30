@@ -18,10 +18,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useHotlists, useCreateHotlist, useDeleteHotlist } from "@/lib/hooks/use-hotlists";
+import { Pager } from "@/components/ui/pager";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useHotlistsPage, useCreateHotlist, useDeleteHotlist } from "@/lib/hooks/use-hotlists";
 import { ApiError } from "@/lib/api/client";
 import { cn, relativeTime } from "@/lib/utils";
-import { Plus, Trash2, Users, Send } from "lucide-react";
+import { Plus, Search, Trash2, Users, Send } from "lucide-react";
 
 const statusTone: Record<string, string> = {
   Draft: "bg-slate-100 text-slate-700 border-slate-200",
@@ -98,13 +100,30 @@ function NewHotlistDialog() {
   );
 }
 
+const PAGE_SIZE = 50;
+
 export function HotlistsClient() {
-  const { data: hotlists, isLoading } = useHotlists();
+  const [search, setSearch] = useState("");
+  const [offset, setOffset] = useState(0);
+  const debouncedSearch = useDebouncedValue(search.trim());
+  // Paged and searched on the server; the lists grow with every send.
+  const { data, isLoading } = useHotlistsPage({
+    search: debouncedSearch || undefined,
+    limit: PAGE_SIZE,
+    offset,
+  });
+  // The stat cards read only the totals, so each asks for a single row.
+  const { data: all } = useHotlistsPage({ limit: 1 });
+  const { data: drafts } = useHotlistsPage({ status: "Draft", limit: 1 });
+  const { data: sent } = useHotlistsPage({ status: "Sent", limit: 1 });
   const remove = useDeleteHotlist();
 
-  const rows = hotlists ?? [];
-  const sentCount = rows.filter((h) => h.status === "Sent").length;
-  const draftCount = rows.filter((h) => h.status === "Draft").length;
+  const rows = data?.data ?? [];
+
+  function updateSearch(value: string) {
+    setSearch(value);
+    setOffset(0);
+  }
 
   async function handleDelete(id: string, name: string) {
     if (!window.confirm(`Delete "${name}"? Its send history goes with it.`)) return;
@@ -128,13 +147,24 @@ export function HotlistsClient() {
       }
     >
       <div className="grid grid-cols-3 gap-3 mb-6">
-        <StatCard label="Hotlists" value={rows.length} />
-        <StatCard label="Drafts" value={draftCount} />
-        <StatCard label="Sent" value={sentCount} tone="success" />
+        <StatCard label="Hotlists" value={all?.total ?? 0} />
+        <StatCard label="Drafts" value={drafts?.total ?? 0} />
+        <StatCard label="Sent" value={sent?.total ?? 0} tone="success" />
       </div>
 
       <Card>
         <CardContent className="p-0">
+          <div className="flex items-center gap-2 p-4 border-b">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by name or subject…"
+                className="pl-9 h-9"
+                value={search}
+                onChange={(e) => updateSearch(e.target.value)}
+              />
+            </div>
+          </div>
           {isLoading ? (
             <div className="space-y-2 p-6">
               <Skeleton className="h-12 w-full" />
@@ -144,7 +174,9 @@ export function HotlistsClient() {
             <div className="p-10 text-center">
               <Send className="mx-auto h-8 w-8 text-muted-foreground" />
               <p className="mt-3 text-sm text-muted-foreground">
-                No hotlists yet. Create one to market your bench consultants to clients and vendors.
+                {debouncedSearch
+                  ? "No hotlists match that search."
+                  : "No hotlists yet. Create one to market your bench consultants to clients and vendors."}
               </p>
             </div>
           ) : (
@@ -203,6 +235,12 @@ export function HotlistsClient() {
             </table>
           )}
         </CardContent>
+        <Pager
+          offset={offset}
+          limit={PAGE_SIZE}
+          total={data?.total ?? 0}
+          onOffsetChange={setOffset}
+        />
       </Card>
     </AppShell>
   );

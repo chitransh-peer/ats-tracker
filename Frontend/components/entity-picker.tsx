@@ -14,14 +14,28 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { searchApplicationOptions } from "@/lib/api/applications";
 import { searchClientOptions } from "@/lib/api/clients";
-import { searchVendorOptions } from "@/lib/api/vendors";
+import { searchJobOptions } from "@/lib/api/jobs";
+import { searchVendorOptions, type EntityOption } from "@/lib/api/vendors";
 import { cn } from "@/lib/utils";
 
-const SEARCHERS = {
-  clients: searchClientOptions,
-  vendors: searchVendorOptions,
-} as const;
+type Searcher = (search: string, ids?: string[], status?: string) => Promise<EntityOption[]>;
+
+const SEARCHERS: Record<"clients" | "vendors" | "jobs" | "applications", Searcher> = {
+  clients: (search, ids) => searchClientOptions(search, ids),
+  vendors: (search, ids) => searchVendorOptions(search, ids),
+  jobs: async (search, ids, status) =>
+    (await searchJobOptions(search, ids, status)).map((j) => ({
+      id: j.id,
+      name: `${j.title} · ${j.req_id}`,
+    })),
+  applications: async (search, ids, status) =>
+    (await searchApplicationOptions(search, ids, status)).map((a) => ({
+      id: a.id,
+      name: `${a.candidate_name} — ${a.job_title}`,
+    })),
+};
 
 interface EntityPickerProps {
   kind: keyof typeof SEARCHERS;
@@ -31,25 +45,34 @@ interface EntityPickerProps {
   placeholder: string;
   /** An id never to offer, e.g. the client being edited as its own parent. */
   excludeId?: string;
+  /** Only offer records in this status (jobs and applications). */
+  status?: string;
 }
 
 /**
- * Type-to-search picker for clients and vendors. For a "pick to add" control,
+ * Type-to-search picker for clients, vendors, jobs and applications. For a "pick to add" control,
  * pass `value={null}` and act on each `onChange`.
  *
  * Replaces dropdowns that listed every record: at the tens of thousands a
  * Ceipal import brings in, those loaded the whole table into the browser and
  * froze the form. This asks the server for the first 20 matches instead.
  */
-export function EntityPicker({ kind, value, onChange, placeholder, excludeId }: EntityPickerProps) {
+export function EntityPicker({
+  kind,
+  value,
+  onChange,
+  placeholder,
+  excludeId,
+  status,
+}: EntityPickerProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search);
   const searcher = SEARCHERS[kind];
 
   const { data: matches, isFetching } = useQuery({
-    queryKey: [kind, "options", debouncedSearch],
-    queryFn: () => searcher(debouncedSearch),
+    queryKey: [kind, "options", debouncedSearch, status],
+    queryFn: () => searcher(debouncedSearch, [], status),
     enabled: open,
     placeholderData: (previous) => previous,
   });

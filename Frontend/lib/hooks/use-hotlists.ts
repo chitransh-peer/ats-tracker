@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as hotlistsApi from "@/lib/api/hotlists";
 import type { HotlistInput } from "@/lib/api/types";
 
-export function useHotlists(status?: string) {
+export function useHotlistsPage(filters: hotlistsApi.HotlistFilters = {}) {
   return useQuery({
-    queryKey: ["hotlists", status ?? "all"],
-    queryFn: () => hotlistsApi.listHotlists(status),
+    queryKey: ["hotlists", "page", filters],
+    queryFn: () => hotlistsApi.listHotlistsPage(filters),
+    placeholderData: (previous) => previous,
   });
 }
 

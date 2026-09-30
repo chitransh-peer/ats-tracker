@@ -4,11 +4,13 @@ from collections.abc import Generator
 import jwt
 from fastapi import Depends, Request
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.enums import PermissionAction, PermissionResource, RoleName
 from app.core.exceptions import ForbiddenError, PasswordChangeRequiredError, UnauthorizedError
 from app.core.security import decode_token
+from app.db.models.user import User
 from app.db.session import get_db
 from app.schemas.auth import CurrentUser
 from app.services.roles.service import roles_grant
@@ -37,6 +39,7 @@ _PASSWORD_CHANGE_EXEMPT_PATHS = frozenset(
 def get_current_user(
     request: Request,
     token: str | None = Depends(_oauth2_scheme),
+    db: Session = Depends(get_db_session),
 ) -> CurrentUser:
     if token is None:
         raise UnauthorizedError("Missing authentication token")
@@ -55,8 +58,16 @@ def get_current_user(
     if decoded.get("must_change_password") and request.url.path.rstrip("/") not in _PASSWORD_CHANGE_EXEMPT_PATHS:
         raise PasswordChangeRequiredError()
 
+    user_id = uuid.UUID(decoded["sub"])
+    # The token alone would keep a deactivated or deleted account working until
+    # it expired, up to 30 minutes later. One primary-key lookup per request
+    # makes deactivation take effect on the very next call.
+    is_active = db.scalar(select(User.is_active).where(User.id == user_id, User.deleted_at.is_(None)))
+    if not is_active:
+        raise UnauthorizedError("This account is no longer active")
+
     return CurrentUser(
-        id=uuid.UUID(decoded["sub"]),
+        id=user_id,
         organization_id=uuid.UUID(decoded["org_id"]),
         roles=decoded.get("roles", []),
     )

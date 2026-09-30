@@ -9,8 +9,7 @@ import {
   useBulkRejectApplications,
   useBulkHoldApplications,
 } from "@/lib/hooks/use-applications";
-import { useCandidates } from "@/lib/hooks/use-candidates";
-import { useJobs } from "@/lib/hooks/use-jobs";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useStages } from "@/lib/hooks/use-pipeline";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -57,41 +56,38 @@ export function ApplicationsClient() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmAction, setConfirmAction] = useState<"reject" | "hold" | null>(null);
 
-  const { data, isLoading } = useApplicationsPage({ page_size: PAGE_SIZE, offset });
+  const debouncedSearch = useDebouncedValue(search.trim());
+  // Searched on the server, and each row arrives with its candidate and job
+  // named. Before, names came from the first page of candidates and jobs, so
+  // anyone past the newest 50 showed as "Unknown", and search covered only
+  // the page on screen.
+  const { data, isLoading } = useApplicationsPage({
+    page_size: PAGE_SIZE,
+    offset,
+    search: debouncedSearch || undefined,
+  });
   const applications = data?.data;
   const total = data?.total ?? 0;
-  const { data: candidates } = useCandidates();
-  const { data: jobs } = useJobs();
   const { data: stageTemplate } = useStages();
   const bulkReject = useBulkRejectApplications();
   const bulkHold = useBulkHoldApplications();
 
-  const candidateById = useMemo(
-    () => new Map((candidates ?? []).map((c) => [c.id, c])),
-    [candidates],
-  );
-  const jobById = useMemo(() => new Map((jobs ?? []).map((j) => [j.id, j])), [jobs]);
   const stageById = useMemo(
     () => new Map((stageTemplate?.stages ?? []).map((s) => [s.id, s.name])),
     [stageTemplate],
   );
 
-  const rows = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return (applications ?? [])
-      .map((a) => ({
+  const rows = useMemo(
+    () =>
+      (applications ?? []).map((a) => ({
         application: a,
-        candidate: candidateById.get(a.candidate_id),
-        job: jobById.get(a.job_id),
-      }))
-      .filter(({ candidate, job }) => {
-        if (!query) return true;
-        return (
-          candidate?.full_name.toLowerCase().includes(query) ||
-          job?.title.toLowerCase().includes(query)
-        );
-      });
-  }, [applications, search, candidateById, jobById]);
+        candidate: a.candidate_name
+          ? { id: a.candidate_id, full_name: a.candidate_name }
+          : undefined,
+        job: a.job_title ? { id: a.job_id, title: a.job_title } : undefined,
+      })),
+    [applications],
+  );
 
   // Only "Active" applications are eligible for reject/hold — a bulk action
   // silently skipping half a selection because it included stale rows would

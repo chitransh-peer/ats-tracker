@@ -3,10 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { AppShell, StatCard } from "@/components/layout/AppShell";
-import { useOffers, useCreateOffer, useOfferAction } from "@/lib/hooks/use-offers";
-import { useApplications } from "@/lib/hooks/use-applications";
-import { useCandidates } from "@/lib/hooks/use-candidates";
-import { useJobs } from "@/lib/hooks/use-jobs";
+import {
+  useCreateOffer,
+  useOfferAction,
+  useOfferSummary,
+  useOffersPage,
+} from "@/lib/hooks/use-offers";
+import { EntityPicker } from "@/components/entity-picker";
+import { Pager } from "@/components/ui/pager";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,13 +50,7 @@ function NewOfferDialog() {
   const [equity, setEquity] = useState("");
   const [joiningDate, setJoiningDate] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const { data: applications } = useApplications({ status: "Active" });
-  const { data: candidates } = useCandidates();
-  const { data: jobs } = useJobs();
   const createOffer = useCreateOffer();
-
-  const candidateById = new Map((candidates ?? []).map((c) => [c.id, c]));
-  const jobById = new Map((jobs ?? []).map((j) => [j.id, j]));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -89,19 +87,13 @@ function NewOfferDialog() {
           {error && <div className="text-sm text-destructive">{error}</div>}
           <div className="space-y-1.5">
             <Label className="text-xs">Application</Label>
-            <Select value={applicationId} onValueChange={setApplicationId} required>
-              <SelectTrigger>
-                <SelectValue placeholder="Select candidate · job" />
-              </SelectTrigger>
-              <SelectContent>
-                {(applications ?? []).map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {candidateById.get(a.candidate_id)?.full_name ?? "Unknown"} ·{" "}
-                    {jobById.get(a.job_id)?.title ?? "Unknown"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <EntityPicker
+              kind="applications"
+              status="Active"
+              value={applicationId || null}
+              onChange={(id) => setApplicationId(id ?? "")}
+              placeholder="Search candidate or job"
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -147,16 +139,15 @@ function NewOfferDialog() {
   );
 }
 
-export function OffersClient() {
-  const { data: offers, isLoading } = useOffers();
-  const { data: applications } = useApplications();
-  const { data: candidates } = useCandidates();
-  const { data: jobs } = useJobs();
-  const actions = useOfferAction();
+const PAGE_SIZE = 50;
 
-  const applicationById = new Map((applications ?? []).map((a) => [a.id, a]));
-  const candidateById = new Map((candidates ?? []).map((c) => [c.id, c]));
-  const jobById = new Map((jobs ?? []).map((j) => [j.id, j]));
+export function OffersClient() {
+  const [offset, setOffset] = useState(0);
+  // Paged, named and counted by the server; see the interviews page.
+  const { data, isLoading } = useOffersPage({ limit: PAGE_SIZE, offset });
+  const { data: summary } = useOfferSummary();
+  const offers = data?.data;
+  const actions = useOfferAction();
 
   return (
     <AppShell
@@ -165,24 +156,14 @@ export function OffersClient() {
       actions={<NewOfferDialog />}
     >
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <StatCard
-          label="In progress"
-          value={
-            offers?.filter((o) => !["Accepted", "Declined", "Expired"].includes(o.status)).length ??
-            0
-          }
-        />
+        <StatCard label="In progress" value={summary?.in_progress ?? 0} />
         <StatCard
           label="Awaiting approval"
-          value={offers?.filter((o) => o.status === "Approval Pending").length ?? 0}
+          value={summary?.awaiting_approval ?? 0}
           tone="warning"
         />
-        <StatCard label="Sent" value={offers?.filter((o) => o.status === "Sent").length ?? 0} />
-        <StatCard
-          label="Accepted"
-          value={offers?.filter((o) => o.status === "Accepted").length ?? 0}
-          tone="success"
-        />
+        <StatCard label="Sent" value={summary?.sent ?? 0} />
+        <StatCard label="Accepted" value={summary?.accepted ?? 0} tone="success" />
       </div>
 
       <Card>
@@ -215,26 +196,21 @@ export function OffersClient() {
                 </tr>
               )}
               {offers?.map((o) => {
-                const application = applicationById.get(o.application_id);
-                const candidate = application
-                  ? candidateById.get(application.candidate_id)
-                  : undefined;
-                const job = application ? jobById.get(application.job_id) : undefined;
                 return (
                   <tr key={o.id} className="hover:bg-muted/30">
                     <td className="p-3">
-                      {candidate ? (
+                      {o.candidate_id && o.candidate_name ? (
                         <Link
-                          href={`/candidates/${candidate.id}`}
+                          href={`/candidates/${o.candidate_id}`}
                           className="font-medium hover:underline"
                         >
-                          {candidate.full_name}
+                          {o.candidate_name}
                         </Link>
                       ) : (
                         "Unknown"
                       )}
                     </td>
-                    <td className="p-3 text-xs">{job?.title ?? "—"}</td>
+                    <td className="p-3 text-xs">{o.job_title ?? "—"}</td>
                     <td className="p-3 text-right font-medium">
                       ${o.base_salary.toLocaleString()}
                     </td>
@@ -313,6 +289,12 @@ export function OffersClient() {
             </tbody>
           </table>
         </CardContent>
+        <Pager
+          offset={offset}
+          limit={PAGE_SIZE}
+          total={data?.total ?? 0}
+          onOffsetChange={setOffset}
+        />
       </Card>
     </AppShell>
   );

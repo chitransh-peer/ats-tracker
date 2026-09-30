@@ -1,12 +1,14 @@
 import uuid
 
-from fastapi import APIRouter, Depends, File, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session, require_permission
 from app.api.v1.routes._documents import document_response
 from app.core.enums import AuditAction, PermissionAction, PermissionResource
+from app.core.pagination import PageParams, page_params, paginate
 from app.schemas.application import ApplicationRead
 from app.schemas.auth import CurrentUser
 from app.schemas.job import (
@@ -32,9 +34,18 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 _SKIP_COLUMNS = {"created_by", "updated_by", "deleted_at"}
 
 
-def _to_read(db: Session, job) -> JobRead:
-    stats = job_service.job_stats(db, job.id)
-    assigned_names = job_service_user_names(db, job.assigned_to_ids)
+def _to_read(
+    db: Session,
+    job,
+    *,
+    stats: dict[str, int] | None = None,
+    user_names: dict[uuid.UUID, str] | None = None,
+) -> JobRead:
+    """`stats` and `user_names` are passed in by the list, which fetches them
+    for the whole page at once; a single job looks its own up."""
+    if stats is None:
+        stats = job_service.job_stats(db, job.id)
+    assigned_names = user_names if user_names is not None else job_service_user_names(db, job.assigned_to_ids)
     return JobRead(
         **{column.name: getattr(job, column.name) for column in job.__table__.columns if column.name not in _SKIP_COLUMNS},
         created_by=job.created_by,
@@ -75,25 +86,76 @@ def _note_read(note) -> JobNoteRead:
     )
 
 
+class JobSummary(BaseModel):
+    total: int
+    active: int
+    draft: int
+    closed_or_on_hold: int
+
+
+class JobOption(BaseModel):
+    id: uuid.UUID
+    title: str
+    req_id: str
+    status: str
+
+
 @router.get("", response_model=list[JobRead])
 def list_jobs(
+    response: Response,
     status: str | None = None,
     department: str | None = None,
     client_id: uuid.UUID | None = None,
     recruiter_id: uuid.UUID | None = None,
+    search: str | None = None,
+    pagination: PageParams = Depends(page_params),
     current_user: CurrentUser = Depends(require_permission(PermissionResource.JOB, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> list[JobRead]:
-    jobs = job_service.list_jobs(
-        db,
+    """One page of jobs; the total rides on X-Total-Count.
+
+    Paged, with the per-job counts and names fetched once for the whole page:
+    it used to return every job and make about a dozen queries for each.
+    """
+    query = job_service.build_jobs_query(
         current_user.organization_id,
         status=status,
         department=department,
         client_id=client_id,
         recruiter_id=recruiter_id,
+        search=search,
         viewer=current_user,
     )
-    return [_to_read(db, j) for j in jobs]
+    jobs, total = paginate(db, query, pagination)
+    response.headers["X-Total-Count"] = str(total)
+    stats = job_service.jobs_stats(db, [j.id for j in jobs])
+    names = job_service_user_names(db, [uid for j in jobs for uid in j.assigned_to_ids])
+    return [_to_read(db, j, stats=stats.get(j.id, job_service.job_stats_empty()), user_names=names) for j in jobs]
+
+
+@router.get("/summary", response_model=JobSummary)
+def job_summary(
+    current_user: CurrentUser = Depends(require_permission(PermissionResource.JOB, PermissionAction.READ)),
+    db: Session = Depends(get_db_session),
+) -> JobSummary:
+    return JobSummary(**job_service.job_summary(db, current_user.organization_id, viewer=current_user))
+
+
+@router.get("/options", response_model=list[JobOption])
+def job_options(
+    search: str | None = None,
+    ids: list[uuid.UUID] = Query(default=[]),
+    status: str | None = None,
+    limit: int = Query(default=20, ge=1, le=50),
+    current_user: CurrentUser = Depends(require_permission(PermissionResource.JOB, PermissionAction.READ)),
+    db: Session = Depends(get_db_session),
+) -> list[JobOption]:
+    """Lightweight id/title matches for type-to-search job pickers, in place
+    of loading the whole job list to fill a dropdown."""
+    rows = job_service.job_options(
+        db, current_user.organization_id, search=search, ids=ids, status=status, limit=limit, viewer=current_user
+    )
+    return [JobOption(id=jid, title=title, req_id=req_id, status=job_status) for jid, title, req_id, job_status in rows]
 
 
 @router.post("", response_model=JobRead, status_code=201)

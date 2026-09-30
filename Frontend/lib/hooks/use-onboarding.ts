@@ -8,6 +8,21 @@ export function useOnboardingCases(filters: onboardingApi.OnboardingFilters = {}
   });
 }
 
+export function useOnboardingCasesPage(filters: onboardingApi.OnboardingFilters = {}) {
+  return useQuery({
+    queryKey: ["onboarding", "page", filters],
+    queryFn: () => onboardingApi.listOnboardingCasesPage(filters),
+    placeholderData: (previous) => previous,
+  });
+}
+
+export function useOnboardingSummary() {
+  return useQuery({
+    queryKey: ["onboarding", "summary"],
+    queryFn: onboardingApi.getOnboardingSummary,
+  });
+}
+
 export function useOnboardingActions() {
   const queryClient = useQueryClient();
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["onboarding"] });

@@ -17,11 +17,21 @@ from app.schemas.ai import (
 from app.schemas.auth import CurrentUser
 from app.services.ai import evaluation as evaluation_service
 from app.services.ai import resume_parsing as resume_parsing_service
+from app.services.applications.service import get_application
 from app.services.audit.service import record as record_audit
+from app.services.candidates.service import get_candidate
 from app.workers.dispatch import dispatch
 from app.workers.tasks.ai import evaluate_application_task, parse_resume_task
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+
+# Scores and parsed résumés belong to an application or a candidate, so each
+# route below first loads that record through the viewer's scope. A Hiring
+# Manager holds AI read org-wide in the permission matrix; without these
+# checks they could read the score of any application by its id.
+def _check_application(db: Session, current_user: CurrentUser, application_id: uuid.UUID) -> None:
+    get_application(db, current_user.organization_id, application_id, viewer=current_user)
 
 
 @router.get("/config", response_model=AIConfigRead)
@@ -47,6 +57,7 @@ def parse_resume(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.AI_EVALUATION, PermissionAction.UPDATE)),
     db: Session = Depends(get_db_session),
 ) -> ResumeParseRunRead:
+    get_candidate(db, current_user.organization_id, payload.candidate_id, viewer=current_user)
     run = resume_parsing_service.create_pending_run(
         db,
         organization_id=current_user.organization_id,
@@ -75,7 +86,9 @@ def get_parse_run(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.AI_EVALUATION, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> ResumeParseRunRead:
-    return resume_parsing_service.get_parse_run(db, current_user.organization_id, run_id)
+    run = resume_parsing_service.get_parse_run(db, current_user.organization_id, run_id)
+    get_candidate(db, current_user.organization_id, run.candidate_id, viewer=current_user)
+    return run
 
 
 @router.post("/evaluate-application/{application_id}", response_model=AIEvaluationRead, status_code=202)
@@ -84,6 +97,7 @@ def evaluate_application(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.AI_EVALUATION, PermissionAction.UPDATE)),
     db: Session = Depends(get_db_session),
 ) -> AIEvaluationRead:
+    _check_application(db, current_user, application_id)
     evaluation = evaluation_service.create_pending_evaluation(
         db, organization_id=current_user.organization_id, application_id=application_id, actor_id=current_user.id
     )
@@ -106,7 +120,9 @@ def get_evaluation(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.AI_EVALUATION, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> AIEvaluationRead:
-    return evaluation_service.get_evaluation(db, current_user.organization_id, evaluation_id)
+    evaluation = evaluation_service.get_evaluation(db, current_user.organization_id, evaluation_id)
+    _check_application(db, current_user, evaluation.application_id)
+    return evaluation
 
 
 @router.post("/evaluations/{evaluation_id}/override", response_model=AIEvaluationRead)
@@ -117,6 +133,7 @@ def override_evaluation(
     db: Session = Depends(get_db_session),
 ) -> AIEvaluationRead:
     evaluation = evaluation_service.get_evaluation(db, current_user.organization_id, evaluation_id)
+    _check_application(db, current_user, evaluation.application_id)
     evaluation = evaluation_service.override_evaluation(
         db, evaluation, actor_id=current_user.id, new_recommendation=payload.recommendation_label, note=payload.note
     )
@@ -139,4 +156,5 @@ def compare_jd_resume(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.AI_EVALUATION, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> JDResumeComparisonRead:
+    _check_application(db, current_user, application_id)
     return evaluation_service.compare_jd_resume(db, current_user.organization_id, application_id)

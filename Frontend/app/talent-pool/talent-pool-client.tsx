@@ -47,7 +47,9 @@ function rediscoveryMatches(
 
 export function TalentPoolClient() {
   const { data: pool, isLoading } = useCandidates({ pool: true });
-  const { data: openJobs } = useJobs({ status: "Active" });
+  // The 200 newest open jobs (the most one page returns): rediscovery ranks
+  // the six best overlaps, and the newest openings are the ones worth filling.
+  const { data: openJobs } = useJobs({ status: "Active", limit: 200 });
   const [segment, setSegment] = useState<SegmentKey>("all");
   const [query, setQuery] = useState("");
 

@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 
 
 class VendorContactCreate(BaseModel):
@@ -102,6 +102,20 @@ class VendorBankAccountRead(VendorBankAccountCreate):
     id: uuid.UUID
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("account_number")
+    def _mask_account_number(self, value: str) -> str:
+        # Every screen shows only the last four digits, so the API sends no
+        # more than that: the full number would otherwise sit in every vendor
+        # response, browser cache and exported HAR file.
+        return mask_account_number(value)
+
+
+def mask_account_number(value: str) -> str:
+    """ "123456789" -> "•••••6789"; four characters or fewer are masked whole."""
+    if len(value) <= 4:
+        return "•" * len(value)
+    return "•" * (len(value) - 4) + value[-4:]
 
 
 class VendorBase(BaseModel):

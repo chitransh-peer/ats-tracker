@@ -30,6 +30,16 @@ def _disable_rate_limiting():
     limiter.enabled = True
 
 
+@pytest.fixture(autouse=True)
+def _fresh_report_cache():
+    """Reports are cached for a minute; a test that changes data and reads a
+    report again must see the change, not the cached figure."""
+    from app.api.v1.routes.reports import REPORT_CACHE
+
+    REPORT_CACHE.clear()
+    yield
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _prepare_schema():
     """Creates any missing tables and seeds the role/permission matrix once per test run.

@@ -1,10 +1,13 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session, require_permission
+from app.api.v1.routes._application_refs import with_application_refs
 from app.core.enums import AuditAction, PermissionAction, PermissionResource
+from app.core.pagination import PageParams, page_params, paginate
 from app.schemas.auth import CurrentUser
 from app.schemas.interview import (
     ConsolidatedFeedbackRead,
@@ -20,16 +23,44 @@ from app.services.interviews import service as interview_service
 router = APIRouter(prefix="/interviews", tags=["interviews"])
 
 
+class InterviewSummary(BaseModel):
+    scheduled: int
+    completed: int
+    awaiting_feedback: int
+
+
 @router.get("", response_model=list[InterviewRead])
 def list_interviews(
+    response: Response,
     application_id: uuid.UUID | None = None,
+    candidate_id: uuid.UUID | None = None,
     status: str | None = None,
+    upcoming: bool = False,
+    pagination: PageParams = Depends(page_params),
     current_user: CurrentUser = Depends(require_permission(PermissionResource.INTERVIEW, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> list[InterviewRead]:
-    return interview_service.list_interviews(
-        db, current_user.organization_id, application_id=application_id, status=status, viewer=current_user
+    """One page of interviews, each with its candidate and job named; the
+    total rides on X-Total-Count."""
+    query = interview_service.build_interviews_query(
+        current_user.organization_id,
+        application_id=application_id,
+        candidate_id=candidate_id,
+        status=status,
+        upcoming=upcoming,
+        viewer=current_user,
     )
+    interviews, total = paginate(db, query, pagination)
+    response.headers["X-Total-Count"] = str(total)
+    return with_application_refs(db, interviews, InterviewRead)
+
+
+@router.get("/summary", response_model=InterviewSummary)
+def interview_summary(
+    current_user: CurrentUser = Depends(require_permission(PermissionResource.INTERVIEW, PermissionAction.READ)),
+    db: Session = Depends(get_db_session),
+) -> InterviewSummary:
+    return InterviewSummary(**interview_service.interview_summary(db, current_user.organization_id, viewer=current_user))
 
 
 @router.post("", response_model=InterviewRead, status_code=201)
@@ -59,7 +90,8 @@ def get_interview(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.INTERVIEW, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> InterviewRead:
-    return interview_service.get_interview(db, current_user.organization_id, interview_id, viewer=current_user)
+    interview = interview_service.get_interview(db, current_user.organization_id, interview_id, viewer=current_user)
+    return with_application_refs(db, [interview], InterviewRead)[0]
 
 
 @router.patch("/{interview_id}", response_model=InterviewRead)

@@ -8,6 +8,21 @@ export function useInterviews(filters: interviewsApi.InterviewFilters = {}) {
   });
 }
 
+export function useInterviewsPage(filters: interviewsApi.InterviewFilters = {}) {
+  return useQuery({
+    queryKey: ["interviews", "page", filters],
+    queryFn: () => interviewsApi.listInterviewsPage(filters),
+    placeholderData: (previous) => previous,
+  });
+}
+
+export function useInterviewSummary() {
+  return useQuery({
+    queryKey: ["interviews", "summary"],
+    queryFn: interviewsApi.getInterviewSummary,
+  });
+}
+
 export function useCreateInterview() {
   const queryClient = useQueryClient();
   return useMutation({

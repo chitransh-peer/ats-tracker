@@ -25,8 +25,6 @@ import {
 } from "@/lib/hooks/use-reports";
 import { useCandidates } from "@/lib/hooks/use-candidates";
 import { useInterviews } from "@/lib/hooks/use-interviews";
-import { useApplications } from "@/lib/hooks/use-applications";
-import { useStages } from "@/lib/hooks/use-pipeline";
 import { initialsOf, relativeTime } from "@/lib/utils";
 import { ArrowRight, CalendarClock, Clock } from "lucide-react";
 import {
@@ -63,22 +61,17 @@ export function DashboardClient() {
   const { data: timeToFill } = useTimeToFill();
   const { data: executive } = useExecutiveDashboard();
   const { data: recruiterPerformance } = useRecruiterPerformance();
-  const { data: candidates } = useCandidates();
-  const { data: interviews } = useInterviews({ status: "Scheduled" });
-  const { data: applications } = useApplications();
-  const { data: stageTemplate } = useStages();
+  // The six newest and the next five, each named by the server; this used to
+  // load every application and the first page of candidates to join them.
+  const { data: candidates } = useCandidates({ limit: 6 });
+  const { data: interviews } = useInterviews({ upcoming: true, limit: 5 });
   const canViewAuditLogs = ["super_admin", "admin", "executive"].some((r) =>
     user?.roles.includes(r),
   );
   const { data: auditLogs } = useAuditLogs(canViewAuditLogs);
 
-  const stageById = new Map((stageTemplate?.stages ?? []).map((s) => [s.id, s.name]));
-  const applicationById = new Map((applications ?? []).map((a) => [a.id, a]));
-  const candidateById = new Map((candidates ?? []).map((c) => [c.id, c]));
-  const recentCandidates = [...(candidates ?? [])]
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 6);
-  const upcomingInterviews = (interviews ?? []).slice(0, 5);
+  const recentCandidates = candidates ?? [];
+  const upcomingInterviews = interviews ?? [];
   const recentActivity = (auditLogs ?? []).slice(0, 6);
 
   return (
@@ -235,10 +228,6 @@ export function DashboardClient() {
                   </div>
                 )}
                 {upcomingInterviews.map((iv) => {
-                  const application = applicationById.get(iv.application_id);
-                  const candidate = application
-                    ? candidateById.get(application.candidate_id)
-                    : undefined;
                   return (
                     <div key={iv.id} className="flex items-start gap-3 rounded-md border p-3">
                       <div className="grid place-items-center h-9 w-9 rounded-md bg-primary/10 text-primary">
@@ -247,7 +236,7 @@ export function DashboardClient() {
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-medium">{iv.round_name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {candidate?.full_name ?? "Unknown"} · {interviewModeLabel(iv.mode)}
+                          {iv.candidate_name ?? "Unknown"} · {interviewModeLabel(iv.mode)}
                         </div>
                         <div className="text-[11px] text-muted-foreground mt-1">
                           <Clock className="inline h-3 w-3 mr-1" />

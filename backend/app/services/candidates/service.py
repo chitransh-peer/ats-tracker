@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import or_, select
+from sqlalchemy import false, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.enums import CandidateStatus, DuplicateMatchReason, RoleName
@@ -48,7 +48,8 @@ def _scope_filter(query, viewer: CurrentUser | None):
                 .where(InterviewPanelMember.user_id == viewer.id)
             )
         )
-    return query.where(or_(*conditions))
+    # false() first: with no condition for this viewer's roles, nothing matches.
+    return query.where(or_(false(), *conditions))
 
 
 def _load(query):

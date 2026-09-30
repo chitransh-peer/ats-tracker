@@ -337,6 +337,52 @@ export interface Application {
   applied_at: string;
   ai_score?: number | null;
   ai_recommendation?: string | null;
+  /** Filled in on list reads, so a page need not look every candidate and job up. */
+  candidate_name?: string | null;
+  job_title?: string | null;
+  job_req_id?: string | null;
+}
+
+/** A "candidate — job" match for a type-to-search picker. */
+export interface ApplicationOption {
+  id: string;
+  candidate_name: string;
+  job_title: string;
+}
+
+export interface JobOption {
+  id: string;
+  title: string;
+  req_id: string;
+  status: string;
+}
+
+export interface JobSummary {
+  total: number;
+  active: number;
+  draft: number;
+  closed_or_on_hold: number;
+}
+
+export interface PipelineBoardCard {
+  id: string;
+  candidate_id: string;
+  candidate_name: string | null;
+  job_id: string;
+  job_title: string | null;
+  current_stage_id: string | null;
+  status: string;
+  applied_at: string;
+}
+
+/** `total` counts every application on the board; `cards` holds at most
+ * `limit` of them, newest first. */
+export interface PipelineBoard {
+  stage_counts: { stage_id: string; count: number }[];
+  total: number;
+  hired: number;
+  cards: PipelineBoardCard[];
+  limit: number;
 }
 
 export interface ApplicationStageHistoryEntry {
@@ -380,6 +426,11 @@ export interface Interview {
   id: string;
   organization_id: string;
   application_id: string;
+  /** The application's candidate and job, named by the server on list reads. */
+  candidate_id: string | null;
+  candidate_name: string | null;
+  job_id: string | null;
+  job_title: string | null;
   round_name: string;
   mode: string;
   scheduled_at: string;
@@ -388,6 +439,12 @@ export interface Interview {
   feedback_entries: InterviewFeedbackEntry[];
   created_at: string;
   updated_at: string;
+}
+
+export interface InterviewSummary {
+  scheduled: number;
+  completed: number;
+  awaiting_feedback: number;
 }
 
 export interface ConsolidatedFeedback {
@@ -421,6 +478,11 @@ export interface Offer {
   id: string;
   organization_id: string;
   application_id: string;
+  /** The application's candidate and job, named by the server on list reads. */
+  candidate_id: string | null;
+  candidate_name: string | null;
+  job_id: string | null;
+  job_title: string | null;
   status: string;
   base_salary: number;
   bonus: number | null;
@@ -430,6 +492,13 @@ export interface Offer {
   approvals: OfferApproval[];
   created_at: string;
   updated_at: string;
+}
+
+export interface OfferSummary {
+  in_progress: number;
+  awaiting_approval: number;
+  sent: number;
+  accepted: number;
 }
 
 export interface OnboardingTask {
@@ -449,6 +518,11 @@ export interface OnboardingCase {
   id: string;
   organization_id: string;
   application_id: string;
+  /** The application's candidate and job, named by the server on list reads. */
+  candidate_id: string | null;
+  candidate_name: string | null;
+  job_id: string | null;
+  job_title: string | null;
   status: string;
   start_date: string | null;
   coordinator_id: string | null;
@@ -457,6 +531,12 @@ export interface OnboardingCase {
   tasks: OnboardingTask[];
   created_at: string;
   updated_at: string;
+}
+
+export interface OnboardingSummary {
+  in_progress: number;
+  completed: number;
+  cancelled: number;
 }
 
 export interface FunnelStage {

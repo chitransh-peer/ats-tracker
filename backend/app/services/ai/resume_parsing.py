@@ -27,17 +27,48 @@ Resume text:
 """
 
 
+# No résumé needs more than this, so there is no reason to read a 300-page
+# upload to the end. Both limits bound the work a hostile file can make the
+# parser do. The text kept feeds skill matching; the first _PROMPT_CHARS of it
+# go to the model.
+_MAX_TEXT_CHARS = 50_000
+_MAX_PDF_PAGES = 30
+_PROMPT_CHARS = 12_000
+
+
+class UnreadableResumeError(Exception):
+    """The file could not be read as the format it claims to be."""
+
+
 def extract_text(content_type: str, data: bytes) -> str:
-    if content_type == "application/pdf":
-        reader = PdfReader(io.BytesIO(data))
-        return "\n".join(page.extract_text() or "" for page in reader.pages)
-    if content_type in (
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/msword",
-    ):
-        document = docx.Document(io.BytesIO(data))
-        return "\n".join(paragraph.text for paragraph in document.paragraphs)
-    return data.decode("utf-8", errors="ignore")
+    try:
+        if content_type == "application/pdf":
+            return _pdf_text(data)
+        if content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            document = docx.Document(io.BytesIO(data))
+            return "\n".join(paragraph.text for paragraph in document.paragraphs)[:_MAX_TEXT_CHARS]
+    except Exception as exc:
+        # A malformed or truncated file raises from deep inside the library.
+        # That is a property of the upload, not a fault here, so it becomes a
+        # failed parse with a reason rather than an unhandled error.
+        raise UnreadableResumeError(f"The file could not be read ({type(exc).__name__}).") from exc
+    if content_type == "application/msword":
+        # python-docx reads only the .docx format; a legacy .doc is binary.
+        raise UnreadableResumeError("Legacy .doc files cannot be read; save the résumé as PDF or .docx.")
+    return data.decode("utf-8", errors="ignore")[:_MAX_TEXT_CHARS]
+
+
+def _pdf_text(data: bytes) -> str:
+    reader = PdfReader(io.BytesIO(data))
+    parts: list[str] = []
+    length = 0
+    for page in reader.pages[:_MAX_PDF_PAGES]:
+        text = page.extract_text() or ""
+        parts.append(text)
+        length += len(text)
+        if length >= _MAX_TEXT_CHARS:
+            break
+    return "\n".join(parts)[:_MAX_TEXT_CHARS]
 
 
 def create_pending_run(
@@ -73,10 +104,18 @@ def parse_resume(db: Session, run: ResumeParseRun) -> ResumeParseRun:
         return run
 
     raw_bytes = download_bytes(document.storage_key)
-    raw_text = extract_text(document.content_type, raw_bytes)
+    try:
+        raw_text = extract_text(document.content_type, raw_bytes)
+    except UnreadableResumeError as exc:
+        run.status = ResumeParseStatus.FAILED.value
+        run.error_message = str(exc)
+        run.completed_at = datetime.now(UTC)
+        db.commit()
+        db.refresh(run)
+        return run
 
     try:
-        fields = generate_structured(_RESUME_EXTRACTION_PROMPT.format(resume_text=raw_text[:12000]))
+        fields = generate_structured(_RESUME_EXTRACTION_PROMPT.format(resume_text=raw_text[:_PROMPT_CHARS]))
         db.add(
             ParsedResume(
                 resume_parse_run_id=run.id,

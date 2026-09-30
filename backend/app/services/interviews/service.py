@@ -1,10 +1,10 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import Select, false, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.enums import RoleName
+from app.core.enums import InterviewStatus, RoleName
 from app.core.exceptions import NotFoundError
 from app.core.scoping import scoped_roles
 from app.db.models.application import Application
@@ -31,7 +31,8 @@ def _scope_filter(query, viewer: CurrentUser | None):
         conditions.append(
             Interview.id.in_(select(InterviewPanelMember.interview_id).where(InterviewPanelMember.user_id == viewer.id))
         )
-    return query.where(or_(*conditions))
+    # false() first: with no condition for this viewer's roles, nothing matches.
+    return query.where(or_(false(), *conditions))
 
 
 def _load(query):
@@ -85,22 +86,48 @@ def get_interview(
     return interview
 
 
-def list_interviews(
-    db: Session,
+def build_interviews_query(
     organization_id: uuid.UUID,
     *,
     application_id: uuid.UUID | None = None,
+    candidate_id: uuid.UUID | None = None,
     status: str | None = None,
+    upcoming: bool = False,
     viewer: CurrentUser | None = None,
-) -> list[Interview]:
+) -> Select:
+    """Filtered, scoped interview query; the caller pages it.
+
+    Newest first, so the first page is this week rather than the oldest
+    interview on record. `upcoming` narrows to scheduled interviews still
+    ahead and orders them soonest first.
+    """
     query = _load(select(Interview)).where(Interview.organization_id == organization_id)
     if application_id is not None:
         query = query.where(Interview.application_id == application_id)
+    if candidate_id is not None:
+        query = query.where(
+            Interview.application_id.in_(select(Application.id).where(Application.candidate_id == candidate_id))
+        )
     if status is not None:
         query = query.where(Interview.status == status)
     query = _scope_filter(query, viewer)
-    query = query.order_by(Interview.scheduled_at)
-    return list(db.scalars(query).all())
+    if upcoming:
+        query = query.where(Interview.status == InterviewStatus.SCHEDULED.value, Interview.scheduled_at >= datetime.now(UTC))
+        return query.order_by(Interview.scheduled_at, Interview.id)
+    return query.order_by(Interview.scheduled_at.desc(), Interview.id)
+
+
+def interview_summary(db: Session, organization_id: uuid.UUID, *, viewer: CurrentUser | None = None) -> dict[str, int]:
+    """Counts for the list page's stat cards, within the viewer's scope."""
+    no_feedback = ~select(InterviewFeedback.id).where(InterviewFeedback.interview_id == Interview.id).exists()
+    completed = Interview.status == InterviewStatus.COMPLETED.value
+    query = select(
+        func.count(Interview.id).filter(Interview.status == InterviewStatus.SCHEDULED.value),
+        func.count(Interview.id).filter(completed),
+        func.count(Interview.id).filter(completed & no_feedback),
+    ).where(Interview.organization_id == organization_id)
+    scheduled, completed_count, awaiting = db.execute(_scope_filter(query, viewer)).one()
+    return {"scheduled": scheduled, "completed": completed_count, "awaiting_feedback": awaiting}
 
 
 def update_interview(db: Session, interview: Interview, *, actor_id: uuid.UUID | None, **fields) -> Interview:

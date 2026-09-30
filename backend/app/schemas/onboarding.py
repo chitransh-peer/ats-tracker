@@ -3,6 +3,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel
 
+from app.schemas.application import ApplicationRefs
+
 
 class OnboardingTaskCreate(BaseModel):
     title: str
@@ -40,7 +42,7 @@ class OnboardingTaskRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class OnboardingCaseRead(BaseModel):
+class OnboardingCaseRead(ApplicationRefs):
     id: uuid.UUID
     organization_id: uuid.UUID
     application_id: uuid.UUID

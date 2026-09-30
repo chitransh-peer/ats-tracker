@@ -3,6 +3,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel
 
+from app.schemas.application import ApplicationRefs
+
 
 class OfferCreate(BaseModel):
     application_id: uuid.UUID
@@ -47,7 +49,7 @@ class OfferApprovalRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class OfferRead(BaseModel):
+class OfferRead(ApplicationRefs):
     id: uuid.UUID
     organization_id: uuid.UUID
     application_id: uuid.UUID

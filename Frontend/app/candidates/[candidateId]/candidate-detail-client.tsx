@@ -19,10 +19,9 @@ import { useTemplates } from "@/lib/hooks/use-templates";
 import { useEmailStatus } from "@/lib/hooks/use-settings";
 import { useAuth } from "@/lib/auth/auth-context";
 import { ApiError } from "@/lib/api/client";
-import type { Application, Job } from "@/lib/api/types";
+import type { Application } from "@/lib/api/types";
 import { useApplications } from "@/lib/hooks/use-applications";
 import { useInterviews } from "@/lib/hooks/use-interviews";
-import { useJobs } from "@/lib/hooks/use-jobs";
 import { useStages } from "@/lib/hooks/use-pipeline";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,6 +53,9 @@ import { initialsOf, relativeTime } from "@/lib/utils";
 
 /** Fill the merge tokens we can resolve from the current context. Anything we
  *  can't resolve is left visible so the recruiter notices before sending. */
+/** The id and title of a job an application is for. */
+type JobRef = { id: string; title: string };
+
 function applyTokens(
   text: string,
   ctx: { candidateName: string; jobTitle: string | null; recruiterName: string },
@@ -76,7 +78,7 @@ function MessagesTab({
   candidateName: string;
   candidateEmail: string | null;
   applications: Application[];
-  jobById: Map<string, Job>;
+  jobById: Map<string, JobRef>;
 }) {
   const { user } = useAuth();
   const { data: emailStatus } = useEmailStatus();
@@ -254,8 +256,8 @@ export function CandidateDetailClient() {
   const { data: candidate, isLoading } = useCandidate(candidateId);
   const { data: notes } = useCandidateNotes(candidateId);
   const { data: applications } = useApplications({ candidate_id: candidateId });
-  const { data: interviews } = useInterviews();
-  const { data: jobs } = useJobs();
+  // This candidate's interviews only, not every interview in the organization.
+  const { data: interviews } = useInterviews({ candidate_id: candidateId, limit: 200 });
   const { data: stageTemplate } = useStages();
   const addNote = useAddCandidateNote(candidateId);
   const [noteBody, setNoteBody] = useState("");
@@ -281,12 +283,13 @@ export function CandidateDetailClient() {
     );
   }
 
-  const jobById = new Map((jobs ?? []).map((j) => [j.id, j]));
-  const stageById = new Map((stageTemplate?.stages ?? []).map((s) => [s.id, s.name]));
-  const applicationIds = new Set((applications ?? []).map((a) => a.id));
-  const candidateInterviews = (interviews ?? []).filter((iv) =>
-    applicationIds.has(iv.application_id),
+  // Job titles arrive on the applications themselves; the whole job list was
+  // loaded here only to look them up.
+  const jobById = new Map<string, JobRef>(
+    (applications ?? []).map((a) => [a.job_id, { id: a.job_id, title: a.job_title ?? "Role" }]),
   );
+  const stageById = new Map((stageTemplate?.stages ?? []).map((s) => [s.id, s.name]));
+  const candidateInterviews = interviews ?? [];
 
   async function handleAddNote(e: React.FormEvent) {
     e.preventDefault();
@@ -596,7 +599,7 @@ export function CandidateDetailClient() {
                 </p>
               )}
               {(applications ?? []).map((app) => {
-                const job = (jobs ?? []).find((j) => j.id === app.job_id);
+                const job = jobById.get(app.job_id);
                 const score = typeof app.ai_score === "number" ? Math.round(app.ai_score) : null;
                 return (
                   <div key={app.id} className="rounded-md border p-3 space-y-1.5">

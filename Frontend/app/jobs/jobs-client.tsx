@@ -1,10 +1,12 @@
 "use client";
 
 import { ImportExportButtons } from "@/components/import-export";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { AppShell, StatCard } from "@/components/layout/AppShell";
-import { useJobs } from "@/lib/hooks/use-jobs";
+import { Pager } from "@/components/ui/pager";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useJobSummary, useJobsPage } from "@/lib/hooks/use-jobs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,26 +58,35 @@ function statusTone(status: string) {
   return "bg-rose-50 text-rose-700 border-rose-200";
 }
 
+const PAGE_SIZE = 50;
+
 export function JobsClient() {
   const [status, setStatus] = useState<string>("all");
   const [search, setSearch] = useState("");
-  const { data: jobs, isLoading } = useJobs(status !== "all" ? { status } : {});
+  const [offset, setOffset] = useState(0);
+  const debouncedSearch = useDebouncedValue(search.trim());
 
-  const filtered = useMemo(() => {
-    if (!jobs) return [];
-    const query = search.trim().toLowerCase();
-    if (!query) return jobs;
-    return jobs.filter(
-      (j) =>
-        j.title.toLowerCase().includes(query) ||
-        j.req_id.toLowerCase().includes(query) ||
-        (j.client_name ?? "").toLowerCase().includes(query),
-    );
-  }, [jobs, search]);
+  // Paged and searched on the server, with the headline counts from their own
+  // endpoint: loading every job to filter and count here slowed the page
+  // down with each requisition and would stop it loading at a few thousand.
+  const { data, isLoading } = useJobsPage({
+    status: status !== "all" ? status : undefined,
+    search: debouncedSearch || undefined,
+    limit: PAGE_SIZE,
+    offset,
+  });
+  const { data: summary } = useJobSummary();
+  const filtered = data?.data ?? [];
 
-  const active = jobs?.filter((j) => j.status === "Active").length ?? 0;
-  const draft = jobs?.filter((j) => j.status === "Draft").length ?? 0;
-  const closed = jobs?.filter((j) => j.status === "Closed" || j.status === "On Hold").length ?? 0;
+  function updateSearch(value: string) {
+    setSearch(value);
+    setOffset(0);
+  }
+
+  function updateStatus(value: string) {
+    setStatus(value);
+    setOffset(0);
+  }
 
   return (
     <AppShell
@@ -94,10 +105,10 @@ export function JobsClient() {
       }
     >
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Total requisitions" value={jobs?.length ?? 0} />
-        <StatCard label="Active" value={active} tone="success" />
-        <StatCard label="Draft" value={draft} />
-        <StatCard label="Closed / on hold" value={closed} />
+        <StatCard label="Total requisitions" value={summary?.total ?? 0} />
+        <StatCard label="Active" value={summary?.active ?? 0} tone="success" />
+        <StatCard label="Draft" value={summary?.draft ?? 0} />
+        <StatCard label="Closed / on hold" value={summary?.closed_or_on_hold ?? 0} />
       </div>
 
       <Card>
@@ -109,10 +120,10 @@ export function JobsClient() {
                 placeholder="Search jobs, job codes, clients…"
                 className="pl-9 h-9"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => updateSearch(e.target.value)}
               />
             </div>
-            <Select value={status} onValueChange={setStatus}>
+            <Select value={status} onValueChange={updateStatus}>
               <SelectTrigger className="h-9 w-[140px]">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
@@ -155,11 +166,17 @@ export function JobsClient() {
                 {!isLoading && filtered.length === 0 && (
                   <tr>
                     <td colSpan={11} className="p-6 text-center text-muted-foreground">
-                      No jobs yet.{" "}
-                      <Link href="/jobs/new" className="text-primary hover:underline">
-                        Post your first job
-                      </Link>
-                      .
+                      {debouncedSearch || status !== "all" ? (
+                        "No jobs match these filters."
+                      ) : (
+                        <>
+                          No jobs yet.{" "}
+                          <Link href="/jobs/new" className="text-primary hover:underline">
+                            Post your first job
+                          </Link>
+                          .
+                        </>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -204,6 +221,12 @@ export function JobsClient() {
             </table>
           </div>
         </CardContent>
+        <Pager
+          offset={offset}
+          limit={PAGE_SIZE}
+          total={data?.total ?? 0}
+          onOffsetChange={setOffset}
+        />
       </Card>
     </AppShell>
   );
