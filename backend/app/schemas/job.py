@@ -104,6 +104,12 @@ class JobSubmissionsSummary(BaseModel):
     counts: dict[str, int]
 
 
+JOB_MAX_RATE = 100_000_000
+JOB_MAX_TURNAROUND = 9_999
+JOB_MAX_EXPERIENCE_YEARS = 70
+JOB_MAX_COUNT = 10_000
+
+
 def _check_job_numbers(job) -> None:
     """Rules for values a person enters on the job form.
 
@@ -124,9 +130,24 @@ def _check_job_numbers(job) -> None:
         value = getattr(job, key, None)
         if value is not None and value < 0:
             raise ValueError(f"{label} cannot be negative.")
-    hours = getattr(job, "required_hours_per_week", None)
-    if hours is not None and hours > 168:
-        raise ValueError("Required hours per week cannot be more than 168.")
+    # Upper bounds sit well inside what the columns hold (32-bit integers,
+    # Numeric(12,2), Numeric(8,2)); past that the database rejects the insert
+    # with a bare "integer out of range" instead of a message a person can act on.
+    for key, label, limit in (
+        ("pay_min", "Pay rate minimum", JOB_MAX_RATE),
+        ("pay_max", "Pay rate maximum", JOB_MAX_RATE),
+        ("client_bill_rate_min", "Client bill rate minimum", JOB_MAX_RATE),
+        ("client_bill_rate_max", "Client bill rate maximum", JOB_MAX_RATE),
+        ("turnaround_time_value", "Turnaround time", JOB_MAX_TURNAROUND),
+        ("required_hours_per_week", "Required hours per week", 168),
+        ("experience_min_years", "Minimum experience", JOB_MAX_EXPERIENCE_YEARS),
+        ("experience_max_years", "Maximum experience", JOB_MAX_EXPERIENCE_YEARS),
+        ("max_allowed_submissions", "Maximum allowed submissions", JOB_MAX_COUNT),
+        ("openings", "Number of positions", JOB_MAX_COUNT),
+    ):
+        value = getattr(job, key, None)
+        if value is not None and value > limit:
+            raise ValueError(f"{label} cannot be more than {limit:,}.")
     openings = getattr(job, "openings", None)
     if openings is not None and openings < 1:
         raise ValueError("A job needs at least one opening.")

@@ -1,8 +1,12 @@
-from fastapi import FastAPI
+import logging
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from sqlalchemy.exc import DataError
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
@@ -35,8 +39,6 @@ if settings.sentry_dsn:
         # Observability is a nice-to-have; it must never be the reason the API
         # itself fails to start. Logged rather than raised, and loud enough in
         # the startup log that a broken DSN doesn't go unnoticed.
-        import logging
-
         logging.getLogger(__name__).exception("Sentry initialization failed — continuing without error tracking.")
 
 # The interactive docs publish the full API surface to anyone who can reach the
@@ -68,6 +70,21 @@ app.add_middleware(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(DataError)
+def _data_error_handler(request: Request, exc: DataError) -> JSONResponse:
+    # A value the schema let through but the column cannot hold (a number past
+    # the integer range, text past a length limit). It is the caller's input,
+    # not a server fault, so it is answered as a 422 rather than a bare 500.
+    # The session is rolled back by get_db's close when the request unwinds.
+    logging.getLogger(__name__).warning("Rejected a value the database cannot store: %s", exc.orig)
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "One of the values is too large or too long to save. Check the numbers and try again."},
+    )
+
+
 app.add_middleware(SlowAPIMiddleware)
 
 app.include_router(api_router)
