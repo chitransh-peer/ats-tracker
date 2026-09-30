@@ -6,7 +6,9 @@ import Link from "next/link";
 import { AppShell, StatCard } from "@/components/layout/AppShell";
 import { Pager } from "@/components/ui/pager";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { useJobSummary, useJobsPage } from "@/lib/hooks/use-jobs";
+import { useJobAction, useJobSummary, useJobsPage } from "@/lib/hooks/use-jobs";
+import { ApiError } from "@/lib/api/client";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -153,19 +155,20 @@ export function JobsClient() {
                   <th className="p-3 text-left">Job Modified On</th>
                   <th className="p-3 text-left">Job Status</th>
                   <th className="p-3 text-left">Job Age</th>
+                  <th className="p-3 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading && (
                   <tr>
-                    <td colSpan={11} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={12} className="p-6 text-center text-muted-foreground">
                       Loading…
                     </td>
                   </tr>
                 )}
                 {!isLoading && filtered.length === 0 && (
                   <tr>
-                    <td colSpan={11} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={12} className="p-6 text-center text-muted-foreground">
                       {debouncedSearch || status !== "all" ? (
                         "No jobs match these filters."
                       ) : (
@@ -215,6 +218,9 @@ export function JobsClient() {
                         {j.job_age_days} {j.job_age_days === 1 ? "Day" : "Days"}
                       </Badge>
                     </td>
+                    <td className="p-3">
+                      <ActivateJobButton jobId={j.id} status={j.status} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -229,5 +235,30 @@ export function JobsClient() {
         />
       </Card>
     </AppShell>
+  );
+}
+
+/** Publish a draft or resume a held job straight from the list; hold, close
+ *  and cancel live on the job page. */
+function ActivateJobButton({ jobId, status }: { jobId: string; status: string }) {
+  const { publish } = useJobAction(jobId);
+  if (status !== "Draft" && status !== "On Hold")
+    return <span className="text-muted-foreground">—</span>;
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      className="h-7 text-xs"
+      disabled={publish.isPending}
+      onClick={() =>
+        publish.mutate(undefined, {
+          onSuccess: () => toast.success("Job is now active."),
+          onError: (err) =>
+            toast.error(err instanceof ApiError ? err.message : "Could not publish the job."),
+        })
+      }
+    >
+      {status === "Draft" ? "Publish" : "Resume"}
+    </Button>
   );
 }
