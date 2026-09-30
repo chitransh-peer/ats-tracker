@@ -1,9 +1,14 @@
 import { apiClient } from "./client";
-import type { ConsolidatedFeedback, Interview } from "./types";
+import type { ConsolidatedFeedback, Interview, InterviewSummary } from "./types";
 
 export interface InterviewFilters {
   application_id?: string;
+  candidate_id?: string;
   status?: string;
+  /** Scheduled interviews still ahead, soonest first. */
+  upcoming?: boolean;
+  limit?: number;
+  offset?: number;
 }
 
 function buildQuery(params: object): string {
@@ -15,8 +20,26 @@ function buildQuery(params: object): string {
   return qs ? `?${qs}` : "";
 }
 
+function interviewQuery(filters: InterviewFilters): string {
+  return buildQuery({
+    ...filters,
+    upcoming: filters.upcoming ? "true" : undefined,
+    limit: filters.limit?.toString(),
+    offset: filters.offset?.toString(),
+  });
+}
+
+/** One page of interviews, newest first (50 unless `limit` says otherwise). */
 export function listInterviews(filters: InterviewFilters = {}) {
-  return apiClient.get<Interview[]>(`/interviews${buildQuery(filters)}`);
+  return apiClient.get<Interview[]>(`/interviews${interviewQuery(filters)}`);
+}
+
+export function listInterviewsPage(filters: InterviewFilters = {}) {
+  return apiClient.getPage<Interview>(`/interviews${interviewQuery(filters)}`);
+}
+
+export function getInterviewSummary() {
+  return apiClient.get<InterviewSummary>("/interviews/summary");
 }
 
 export function createInterview(input: {

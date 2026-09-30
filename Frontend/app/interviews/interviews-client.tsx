@@ -4,10 +4,13 @@ import { interviewModeLabel } from "@/lib/api/interviews";
 import { useState } from "react";
 import Link from "next/link";
 import { AppShell, StatCard } from "@/components/layout/AppShell";
-import { useInterviews, useCreateInterview } from "@/lib/hooks/use-interviews";
-import { useApplications } from "@/lib/hooks/use-applications";
-import { useCandidates } from "@/lib/hooks/use-candidates";
-import { useJobs } from "@/lib/hooks/use-jobs";
+import {
+  useCreateInterview,
+  useInterviewSummary,
+  useInterviewsPage,
+} from "@/lib/hooks/use-interviews";
+import { EntityPicker } from "@/components/entity-picker";
+import { Pager } from "@/components/ui/pager";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -42,13 +45,7 @@ function ScheduleInterviewDialog() {
   const [mode, setMode] = useState("Video");
   const [scheduledAt, setScheduledAt] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const { data: applications } = useApplications({ status: "Active" });
-  const { data: candidates } = useCandidates();
-  const { data: jobs } = useJobs();
   const createInterview = useCreateInterview();
-
-  const candidateById = new Map((candidates ?? []).map((c) => [c.id, c]));
-  const jobById = new Map((jobs ?? []).map((j) => [j.id, j]));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -81,19 +78,15 @@ function ScheduleInterviewDialog() {
           {error && <div className="text-sm text-destructive">{error}</div>}
           <div className="space-y-1.5">
             <Label className="text-xs">Application</Label>
-            <Select value={applicationId} onValueChange={setApplicationId} required>
-              <SelectTrigger>
-                <SelectValue placeholder="Select candidate · job" />
-              </SelectTrigger>
-              <SelectContent>
-                {(applications ?? []).map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {candidateById.get(a.candidate_id)?.full_name ?? "Unknown"} ·{" "}
-                    {jobById.get(a.job_id)?.title ?? "Unknown"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Searched on the server: listing every active application, with
+                every candidate and job to name them, froze the dialog. */}
+            <EntityPicker
+              kind="applications"
+              status="Active"
+              value={applicationId || null}
+              onChange={(id) => setApplicationId(id ?? "")}
+              placeholder="Search candidate or job"
+            />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Round name</Label>
@@ -134,15 +127,16 @@ function ScheduleInterviewDialog() {
   );
 }
 
-export function InterviewsClient() {
-  const { data: interviews, isLoading } = useInterviews();
-  const { data: applications } = useApplications();
-  const { data: candidates } = useCandidates();
-  const { data: jobs } = useJobs();
+const PAGE_SIZE = 50;
 
-  const applicationById = new Map((applications ?? []).map((a) => [a.id, a]));
-  const candidateById = new Map((candidates ?? []).map((c) => [c.id, c]));
-  const jobById = new Map((jobs ?? []).map((j) => [j.id, j]));
+export function InterviewsClient() {
+  const [offset, setOffset] = useState(0);
+  // Paged, with each interview's candidate and job named by the server and
+  // the stat cards counted there, instead of loading every interview,
+  // application, candidate and job to join them here.
+  const { data, isLoading } = useInterviewsPage({ limit: PAGE_SIZE, offset });
+  const { data: summary } = useInterviewSummary();
+  const interviews = data?.data;
 
   return (
     <AppShell
@@ -151,20 +145,11 @@ export function InterviewsClient() {
       actions={<ScheduleInterviewDialog />}
     >
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
-        <StatCard
-          label="Scheduled"
-          value={interviews?.filter((i) => i.status === "Scheduled").length ?? 0}
-        />
-        <StatCard
-          label="Completed"
-          value={interviews?.filter((i) => i.status === "Completed").length ?? 0}
-        />
+        <StatCard label="Scheduled" value={summary?.scheduled ?? 0} />
+        <StatCard label="Completed" value={summary?.completed ?? 0} />
         <StatCard
           label="Awaiting feedback"
-          value={
-            interviews?.filter((i) => i.status === "Completed" && i.feedback_entries.length === 0)
-              .length ?? 0
-          }
+          value={summary?.awaiting_feedback ?? 0}
           tone="warning"
         />
       </div>
@@ -199,11 +184,6 @@ export function InterviewsClient() {
                 </tr>
               )}
               {interviews?.map((iv) => {
-                const application = applicationById.get(iv.application_id);
-                const candidate = application
-                  ? candidateById.get(application.candidate_id)
-                  : undefined;
-                const job = application ? jobById.get(application.job_id) : undefined;
                 const Icon = modeIcon[iv.mode as keyof typeof modeIcon] ?? Video;
                 return (
                   <tr key={iv.id} className="hover:bg-muted/30">
@@ -211,22 +191,22 @@ export function InterviewsClient() {
                       <div className="flex items-center gap-2">
                         <Avatar className="h-7 w-7">
                           <AvatarFallback className="text-[10px]">
-                            {candidate ? initialsOf(candidate.full_name) : "?"}
+                            {iv.candidate_name ? initialsOf(iv.candidate_name) : "?"}
                           </AvatarFallback>
                         </Avatar>
-                        {candidate ? (
+                        {iv.candidate_id && iv.candidate_name ? (
                           <Link
-                            href={`/candidates/${candidate.id}`}
+                            href={`/candidates/${iv.candidate_id}`}
                             className="hover:underline font-medium"
                           >
-                            {candidate.full_name}
+                            {iv.candidate_name}
                           </Link>
                         ) : (
                           "Unknown"
                         )}
                       </div>
                     </td>
-                    <td className="p-3 text-xs">{job?.title ?? "—"}</td>
+                    <td className="p-3 text-xs">{iv.job_title ?? "—"}</td>
                     <td className="p-3">
                       <Link href={`/interviews/${iv.id}`} className="hover:underline">
                         <Badge variant="secondary" className="text-[10px]">
@@ -269,6 +249,12 @@ export function InterviewsClient() {
             </tbody>
           </table>
         </CardContent>
+        <Pager
+          offset={offset}
+          limit={PAGE_SIZE}
+          total={data?.total ?? 0}
+          onOffsetChange={setOffset}
+        />
       </Card>
     </AppShell>
   );

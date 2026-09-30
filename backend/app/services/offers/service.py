@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, date, datetime
 
-from sqlalchemy import false, select
+from sqlalchemy import Select, false, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.enums import OfferApprovalStatus, OfferStatus, RoleName
@@ -88,21 +88,36 @@ def get_offer(db: Session, organization_id: uuid.UUID, offer_id: uuid.UUID, *, v
     return offer
 
 
-def list_offers(
-    db: Session,
+def build_offers_query(
     organization_id: uuid.UUID,
     *,
     application_id: uuid.UUID | None = None,
     status: str | None = None,
     viewer: CurrentUser | None = None,
-) -> list[Offer]:
+) -> Select:
+    """Filtered, scoped, newest-first offer query; the caller pages it."""
     query = _load(select(Offer)).where(Offer.organization_id == organization_id)
     if application_id is not None:
         query = query.where(Offer.application_id == application_id)
     if status is not None:
         query = query.where(Offer.status == status)
     query = _scope_filter(query, viewer)
-    return list(db.scalars(query.order_by(Offer.created_at.desc())).all())
+    return query.order_by(Offer.created_at.desc(), Offer.id)
+
+
+_FINISHED_OFFER_STATUSES = (OfferStatus.ACCEPTED.value, OfferStatus.DECLINED.value, OfferStatus.EXPIRED.value)
+
+
+def offer_summary(db: Session, organization_id: uuid.UUID, *, viewer: CurrentUser | None = None) -> dict[str, int]:
+    """Counts for the list page's stat cards, within the viewer's scope."""
+    query = select(
+        func.count(Offer.id).filter(Offer.status.not_in(_FINISHED_OFFER_STATUSES)),
+        func.count(Offer.id).filter(Offer.status == OfferStatus.APPROVAL_PENDING.value),
+        func.count(Offer.id).filter(Offer.status == OfferStatus.SENT.value),
+        func.count(Offer.id).filter(Offer.status == OfferStatus.ACCEPTED.value),
+    ).where(Offer.organization_id == organization_id)
+    in_progress, awaiting, sent, accepted = db.execute(_scope_filter(query, viewer)).one()
+    return {"in_progress": in_progress, "awaiting_approval": awaiting, "sent": sent, "accepted": accepted}
 
 
 def update_offer(db: Session, offer: Offer, *, actor_id: uuid.UUID | None, **fields) -> Offer:

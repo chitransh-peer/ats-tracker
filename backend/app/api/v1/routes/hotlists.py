@@ -1,11 +1,13 @@
 import uuid
 
 from fastapi import APIRouter, Depends, File, Response, UploadFile
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session, require_permission
 from app.core.enums import AuditAction, PermissionAction, PermissionResource
 from app.core.exceptions import ValidationAppError
+from app.core.pagination import PageParams, page_params
 from app.schemas.auth import CurrentUser
 from app.schemas.hotlist import (
     AddPartyRecipientsRequest,
@@ -78,22 +80,30 @@ def _to_read(hotlist) -> HotlistRead:
 
 @router.get("", response_model=list[HotlistListItem])
 def list_hotlists(
+    response: Response,
     status: str | None = None,
+    search: str | None = None,
+    pagination: PageParams = Depends(page_params),
     current_user: CurrentUser = Depends(_read),
     db: Session = Depends(get_db_session),
 ) -> list[HotlistListItem]:
+    """One page of hotlists; the total rides on X-Total-Count."""
+    query = hotlist_service.build_hotlists_query(current_user.organization_id, status=status, search=search)
+    total = db.scalar(select(func.count()).select_from(query.order_by(None).subquery())) or 0
+    response.headers["X-Total-Count"] = str(total)
+    rows = db.execute(query.limit(pagination.limit).offset(pagination.offset)).all()
     return [
         HotlistListItem(
             id=h.id,
             name=h.name,
             status=h.status,
             subject=h.subject,
-            member_count=len(h.members),
-            recipient_count=len(h.recipients),
+            member_count=member_count,
+            recipient_count=recipient_count,
             created_at=h.created_at,
             updated_at=h.updated_at,
         )
-        for h in hotlist_service.list_hotlists(db, current_user.organization_id, status=status)
+        for h, member_count, recipient_count in rows
     ]
 
 

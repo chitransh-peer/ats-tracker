@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import false, select
+from sqlalchemy import Select, false, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.enums import (
@@ -121,21 +121,32 @@ def get_case(
     return case
 
 
-def list_cases(
-    db: Session,
+def build_cases_query(
     organization_id: uuid.UUID,
     *,
     status: str | None = None,
     application_id: uuid.UUID | None = None,
     viewer: CurrentUser | None = None,
-) -> list[OnboardingCase]:
+) -> Select:
+    """Filtered, scoped, newest-first case query; the caller pages it."""
     query = _load(select(OnboardingCase)).where(OnboardingCase.organization_id == organization_id)
     if status is not None:
         query = query.where(OnboardingCase.status == status)
     if application_id is not None:
         query = query.where(OnboardingCase.application_id == application_id)
     query = _scope_filter(query, viewer)
-    return list(db.scalars(query.order_by(OnboardingCase.created_at.desc())).all())
+    return query.order_by(OnboardingCase.created_at.desc(), OnboardingCase.id)
+
+
+def case_summary(db: Session, organization_id: uuid.UUID, *, viewer: CurrentUser | None = None) -> dict[str, int]:
+    """Counts for the list page's stat cards, within the viewer's scope."""
+    query = select(
+        func.count(OnboardingCase.id).filter(OnboardingCase.status == OnboardingStatus.IN_PROGRESS.value),
+        func.count(OnboardingCase.id).filter(OnboardingCase.status == OnboardingStatus.COMPLETED.value),
+        func.count(OnboardingCase.id).filter(OnboardingCase.status == OnboardingStatus.CANCELLED.value),
+    ).where(OnboardingCase.organization_id == organization_id)
+    in_progress, completed, cancelled = db.execute(_scope_filter(query, viewer)).one()
+    return {"in_progress": in_progress, "completed": completed, "cancelled": cancelled}
 
 
 def update_case(db: Session, case: OnboardingCase, *, actor_id: uuid.UUID | None, **fields) -> OnboardingCase:

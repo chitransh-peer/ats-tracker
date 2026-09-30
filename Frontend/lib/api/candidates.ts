@@ -37,12 +37,15 @@ export function listCandidatesPage(filters: CandidateFilters = {}) {
   );
 }
 
+/** One page of candidates, newest first (50 unless `limit` says otherwise). */
 export function listCandidates(filters: CandidateFilters = {}) {
   return apiClient.get<Candidate[]>(
     `/candidates${buildQuery({
       status: filters.status,
       pool: filters.pool ? "true" : undefined,
       search: filters.search,
+      limit: filters.limit?.toString(),
+      offset: filters.offset?.toString(),
     })}`,
   );
 }

@@ -1,9 +1,11 @@
 import { apiClient } from "./client";
-import type { OnboardingCase, OnboardingTask } from "./types";
+import type { OnboardingCase, OnboardingSummary, OnboardingTask } from "./types";
 
 export interface OnboardingFilters {
   status?: string;
   application_id?: string;
+  limit?: number;
+  offset?: number;
 }
 
 function buildQuery(params: object): string {
@@ -15,8 +17,24 @@ function buildQuery(params: object): string {
   return qs ? `?${qs}` : "";
 }
 
+function caseQuery(filters: OnboardingFilters): string {
+  return buildQuery({
+    ...filters,
+    limit: filters.limit?.toString(),
+    offset: filters.offset?.toString(),
+  });
+}
+
 export function listOnboardingCases(filters: OnboardingFilters = {}) {
-  return apiClient.get<OnboardingCase[]>(`/onboarding${buildQuery(filters)}`);
+  return apiClient.get<OnboardingCase[]>(`/onboarding${caseQuery(filters)}`);
+}
+
+export function listOnboardingCasesPage(filters: OnboardingFilters = {}) {
+  return apiClient.getPage<OnboardingCase>(`/onboarding${caseQuery(filters)}`);
+}
+
+export function getOnboardingSummary() {
+  return apiClient.get<OnboardingSummary>("/onboarding/summary");
 }
 
 export function getOnboardingCase(caseId: string) {

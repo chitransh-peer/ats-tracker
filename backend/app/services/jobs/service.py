@@ -2,13 +2,14 @@ import secrets
 import uuid
 from datetime import UTC, date, datetime
 
-from sqlalchemy import false, func, or_, select
+from sqlalchemy import Select, false, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.enums import ApplicationStatus, JobStatus, RoleName
 from app.core.exceptions import NotFoundError, ValidationAppError
 from app.core.scoping import scoped_roles
 from app.db.models.application import Application
+from app.db.models.client import Client
 from app.db.models.interview import Interview, InterviewPanelMember
 from app.db.models.job import Job, JobCustomField, JobDocument, JobNote, JobSearchCriteria
 from app.db.models.pipeline_stage import StageTemplateStage
@@ -122,16 +123,45 @@ def get_job(db: Session, organization_id: uuid.UUID, job_id: uuid.UUID, *, viewe
     return job
 
 
-def list_jobs(
-    db: Session,
+# Everything JobRead names, loaded for a whole page in a handful of queries
+# instead of one lazy load per relationship per job.
+_READ_LOAD_OPTIONS = (
+    selectinload(Job.client),
+    selectinload(Job.sales_manager),
+    selectinload(Job.recruitment_manager),
+    selectinload(Job.account_manager),
+    selectinload(Job.primary_recruiter),
+    selectinload(Job.created_by_user),
+    selectinload(Job.updated_by_user),
+    selectinload(Job.custom_fields),
+    selectinload(Job.search_criteria),
+)
+
+
+def _search_filter(search: str | None):
+    """Case-insensitive "contains" on title, job code and client name."""
+    if not search or not search.strip():
+        return None
+    like = f"%{search.strip()}%"
+    return or_(
+        Job.title.ilike(like),
+        Job.req_id.ilike(like),
+        Job.client_id.in_(select(Client.id).where(Client.name.ilike(like))),
+    )
+
+
+def build_jobs_query(
     organization_id: uuid.UUID,
     *,
     status: str | None = None,
     department: str | None = None,
     client_id: uuid.UUID | None = None,
     recruiter_id: uuid.UUID | None = None,
+    search: str | None = None,
     viewer: CurrentUser | None = None,
-) -> list[Job]:
+) -> Select:
+    """Filtered, scoped, newest-first job query; the caller pages it
+    (app/core/pagination.py)."""
     query = select(Job).where(Job.organization_id == organization_id, Job.deleted_at.is_(None))
     if status is not None:
         query = query.where(Job.status == status)
@@ -141,9 +171,58 @@ def list_jobs(
         query = query.where(Job.client_id == client_id)
     if recruiter_id is not None:
         query = query.where(Job.recruiter_id == recruiter_id)
+    condition = _search_filter(search)
+    if condition is not None:
+        query = query.where(condition)
     query = _scope_filter(query, viewer)
-    query = query.order_by(Job.created_at.desc())
-    return list(db.scalars(query).all())
+    return query.options(*_READ_LOAD_OPTIONS).order_by(Job.created_at.desc(), Job.id)
+
+
+def job_summary(db: Session, organization_id: uuid.UUID, *, viewer: CurrentUser | None = None) -> dict[str, int]:
+    """The list page's headline counts, counted by the database within the
+    viewer's scope, rather than by loading every job into the browser."""
+    rows = db.execute(
+        _scope_filter(
+            select(Job.status, func.count(Job.id))
+            .where(Job.organization_id == organization_id, Job.deleted_at.is_(None))
+            .group_by(Job.status),
+            viewer,
+        )
+    ).all()
+    by_status = dict(rows)
+    return {
+        "total": sum(by_status.values()),
+        "active": by_status.get(JobStatus.ACTIVE.value, 0),
+        "draft": by_status.get(JobStatus.DRAFT.value, 0),
+        "closed_or_on_hold": by_status.get(JobStatus.CLOSED.value, 0) + by_status.get(JobStatus.ON_HOLD.value, 0),
+    }
+
+
+def job_options(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    search: str | None = None,
+    ids: list[uuid.UUID] | None = None,
+    status: str | None = None,
+    limit: int = 20,
+    viewer: CurrentUser | None = None,
+) -> list[tuple[uuid.UUID, str, str, str]]:
+    """(id, title, req_id, status) for a type-to-search picker: the first
+    `limit` matches, or the named `ids` so a picker can label its value."""
+    query = select(Job.id, Job.title, Job.req_id, Job.status).where(
+        Job.organization_id == organization_id, Job.deleted_at.is_(None)
+    )
+    if ids:
+        query = query.where(Job.id.in_(ids))
+    else:
+        condition = _search_filter(search)
+        if condition is not None:
+            query = query.where(condition)
+        if status:
+            query = query.where(Job.status == status)
+    query = _scope_filter(query, viewer).order_by(Job.created_at.desc(), Job.id).limit(limit)
+    return [(row.id, row.title, row.req_id, row.status) for row in db.execute(query).all()]
 
 
 def update_job(db: Session, job: Job, *, actor_id: uuid.UUID | None, **fields) -> Job:
@@ -191,31 +270,40 @@ def cancel_job(db: Session, job: Job, *, actor_id: uuid.UUID | None) -> Job:
     return _transition(db, job, to_status=JobStatus.CANCELLED.value, actor_id=actor_id)
 
 
-def job_stats(db: Session, job_id: uuid.UUID) -> dict[str, int]:
-    applications_count = db.scalar(select(func.count(Application.id)).where(Application.job_id == job_id)) or 0
-    hires_count = (
-        db.scalar(
-            select(func.count(Application.id)).where(
-                Application.job_id == job_id, Application.status == ApplicationStatus.HIRED.value
-            )
-        )
-        or 0
-    )
-    shortlisted_count = (
-        db.scalar(
-            select(func.count(Application.id))
-            .join(StageTemplateStage, Application.current_stage_id == StageTemplateStage.id)
-            .where(Application.job_id == job_id, StageTemplateStage.name == "Shortlisted")
-        )
-        or 0
-    )
+def job_stats_empty() -> dict[str, int]:
     return {
-        "applications_count": applications_count,
-        "shortlisted_count": shortlisted_count,
+        "applications_count": 0,
+        "shortlisted_count": 0,
         "interviews_count": 0,
         "offers_count": 0,
-        "hires_count": hires_count,
+        "hires_count": 0,
     }
+
+
+def jobs_stats(db: Session, job_ids: list[uuid.UUID]) -> dict[uuid.UUID, dict[str, int]]:
+    """Application, shortlist and hire counts for a whole page of jobs in one
+    grouped query. A job with no applications is absent from the result."""
+    if not job_ids:
+        return {}
+    rows = db.execute(
+        select(
+            Application.job_id,
+            func.count(Application.id),
+            func.count(Application.id).filter(StageTemplateStage.name == "Shortlisted"),
+            func.count(Application.id).filter(Application.status == ApplicationStatus.HIRED.value),
+        )
+        .outerjoin(StageTemplateStage, Application.current_stage_id == StageTemplateStage.id)
+        .where(Application.job_id.in_(job_ids))
+        .group_by(Application.job_id)
+    ).all()
+    return {
+        job_id: {**job_stats_empty(), "applications_count": total, "shortlisted_count": shortlisted, "hires_count": hires}
+        for job_id, total, shortlisted, hires in rows
+    }
+
+
+def job_stats(db: Session, job_id: uuid.UUID) -> dict[str, int]:
+    return jobs_stats(db, [job_id]).get(job_id, job_stats_empty())
 
 
 # --- Job snapshot sections -------------------------------------------------

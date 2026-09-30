@@ -8,7 +8,7 @@ must not block an HTTP request, and each address needs its own recorded outcome.
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.enums import (
@@ -40,11 +40,24 @@ def _load(query):
     )
 
 
-def list_hotlists(db: Session, organization_id: uuid.UUID, *, status: str | None = None) -> list[Hotlist]:
-    query = _load(select(Hotlist).where(Hotlist.organization_id == organization_id))
+def build_hotlists_query(organization_id: uuid.UUID, *, status: str | None = None, search: str | None = None) -> Select:
+    """Hotlist rows with their member and recipient counts, newest first; the
+    caller pages it. Counted by the database: the index page shows only the
+    counts, and loading every member's bench profile and candidate to count
+    them grew with every list sent."""
+    member_count = select(func.count(HotlistMember.id)).where(HotlistMember.hotlist_id == Hotlist.id).scalar_subquery()
+    recipient_count = (
+        select(func.count(HotlistRecipient.id)).where(HotlistRecipient.hotlist_id == Hotlist.id).scalar_subquery()
+    )
+    query = select(Hotlist, member_count.label("member_count"), recipient_count.label("recipient_count")).where(
+        Hotlist.organization_id == organization_id
+    )
     if status:
         query = query.where(Hotlist.status == status)
-    return list(db.scalars(query.order_by(Hotlist.created_at.desc())).unique().all())
+    if search and search.strip():
+        like = f"%{search.strip()}%"
+        query = query.where(or_(Hotlist.name.ilike(like), Hotlist.subject.ilike(like)))
+    return query.order_by(Hotlist.created_at.desc(), Hotlist.id)
 
 
 def get_hotlist(db: Session, organization_id: uuid.UUID, hotlist_id: uuid.UUID) -> Hotlist:

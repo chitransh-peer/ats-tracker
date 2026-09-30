@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.application import ApplicationRefs
+
 
 class InterviewCreate(BaseModel):
     application_id: uuid.UUID
@@ -44,7 +46,7 @@ class InterviewPanelMemberRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class InterviewRead(BaseModel):
+class InterviewRead(ApplicationRefs):
     id: uuid.UUID
     organization_id: uuid.UUID
     application_id: uuid.UUID

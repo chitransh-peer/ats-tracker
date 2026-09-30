@@ -1,10 +1,13 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session, require_permission
+from app.api.v1.routes._application_refs import with_application_refs
 from app.core.enums import AuditAction, PermissionAction, PermissionResource
+from app.core.pagination import PageParams, page_params, paginate
 from app.schemas.auth import CurrentUser
 from app.schemas.offer import OfferApprovalDecision, OfferCreate, OfferRead, OfferUpdate
 from app.services.audit.service import record as record_audit
@@ -13,16 +16,38 @@ from app.services.offers import service as offer_service
 router = APIRouter(prefix="/offers", tags=["offers"])
 
 
+class OfferSummary(BaseModel):
+    in_progress: int
+    awaiting_approval: int
+    sent: int
+    accepted: int
+
+
 @router.get("", response_model=list[OfferRead])
 def list_offers(
+    response: Response,
     application_id: uuid.UUID | None = None,
     status: str | None = None,
+    pagination: PageParams = Depends(page_params),
     current_user: CurrentUser = Depends(require_permission(PermissionResource.OFFER, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> list[OfferRead]:
-    return offer_service.list_offers(
-        db, current_user.organization_id, application_id=application_id, status=status, viewer=current_user
+    """One page of offers, each with its candidate and job named; the total
+    rides on X-Total-Count."""
+    query = offer_service.build_offers_query(
+        current_user.organization_id, application_id=application_id, status=status, viewer=current_user
     )
+    offers, total = paginate(db, query, pagination)
+    response.headers["X-Total-Count"] = str(total)
+    return with_application_refs(db, offers, OfferRead)
+
+
+@router.get("/summary", response_model=OfferSummary)
+def offer_summary(
+    current_user: CurrentUser = Depends(require_permission(PermissionResource.OFFER, PermissionAction.READ)),
+    db: Session = Depends(get_db_session),
+) -> OfferSummary:
+    return OfferSummary(**offer_service.offer_summary(db, current_user.organization_id, viewer=current_user))
 
 
 @router.post("", response_model=OfferRead, status_code=201)
@@ -52,7 +77,8 @@ def get_offer(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.OFFER, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> OfferRead:
-    return offer_service.get_offer(db, current_user.organization_id, offer_id, viewer=current_user)
+    offer = offer_service.get_offer(db, current_user.organization_id, offer_id, viewer=current_user)
+    return with_application_refs(db, [offer], OfferRead)[0]
 
 
 @router.patch("/{offer_id}", response_model=OfferRead)

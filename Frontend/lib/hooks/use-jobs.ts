@@ -8,11 +8,24 @@ import type {
   JobUpdateInput,
 } from "@/lib/api/types";
 
+/** One page of jobs. For a picker use EntityPicker kind="jobs" instead. */
 export function useJobs(filters: jobsApi.JobFilters = {}) {
   return useQuery({
     queryKey: ["jobs", filters],
     queryFn: () => jobsApi.listJobs(filters),
   });
+}
+
+export function useJobsPage(filters: jobsApi.JobFilters = {}) {
+  return useQuery({
+    queryKey: ["jobs", "page", filters],
+    queryFn: () => jobsApi.listJobsPage(filters),
+    placeholderData: (previous) => previous,
+  });
+}
+
+export function useJobSummary() {
+  return useQuery({ queryKey: ["jobs", "summary"], queryFn: jobsApi.getJobSummary });
 }
 
 export function useJob(jobId: string | undefined) {

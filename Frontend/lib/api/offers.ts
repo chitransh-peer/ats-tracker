@@ -1,9 +1,11 @@
 import { apiClient } from "./client";
-import type { Offer } from "./types";
+import type { Offer, OfferSummary } from "./types";
 
 export interface OfferFilters {
   application_id?: string;
   status?: string;
+  limit?: number;
+  offset?: number;
 }
 
 function buildQuery(params: object): string {
@@ -15,8 +17,24 @@ function buildQuery(params: object): string {
   return qs ? `?${qs}` : "";
 }
 
+function offerQuery(filters: OfferFilters): string {
+  return buildQuery({
+    ...filters,
+    limit: filters.limit?.toString(),
+    offset: filters.offset?.toString(),
+  });
+}
+
 export function listOffers(filters: OfferFilters = {}) {
-  return apiClient.get<Offer[]>(`/offers${buildQuery(filters)}`);
+  return apiClient.get<Offer[]>(`/offers${offerQuery(filters)}`);
+}
+
+export function listOffersPage(filters: OfferFilters = {}) {
+  return apiClient.getPage<Offer>(`/offers${offerQuery(filters)}`);
+}
+
+export function getOfferSummary() {
+  return apiClient.get<OfferSummary>("/offers/summary");
 }
 
 export function createOffer(input: {

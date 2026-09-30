@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { AppShell, StatCard, ScorePill } from "@/components/layout/AppShell";
-import { useApplications } from "@/lib/hooks/use-applications";
-import { useCandidates } from "@/lib/hooks/use-candidates";
-import { useJobs } from "@/lib/hooks/use-jobs";
+import { EntityPicker } from "@/components/entity-picker";
+import { searchApplicationOptions } from "@/lib/api/applications";
 import {
   useAiReview,
   useEvaluateApplication,
@@ -17,13 +17,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { Sparkles, CheckCircle2, AlertTriangle, XCircle, Loader2 } from "lucide-react";
@@ -44,39 +37,22 @@ function statusChip(status: string) {
 }
 
 export function AIReviewClient() {
-  const { data: applications } = useApplications();
-  const { data: candidates } = useCandidates();
-  const { data: jobs } = useJobs();
-
-  const options = useMemo(() => {
-    if (!applications || !candidates || !jobs) return [];
-    const candidateById = new Map(candidates.map((c) => [c.id, c]));
-    const jobById = new Map(jobs.map((j) => [j.id, j]));
-    return applications
-      .map((app) => {
-        const candidate = candidateById.get(app.candidate_id);
-        const job = jobById.get(app.job_id);
-        if (!candidate || !job) return null;
-        return {
-          applicationId: app.id,
-          label: `${candidate.full_name} — ${job.title}`,
-        };
-      })
-      .filter((o): o is { applicationId: string; label: string } => o !== null);
-  }, [applications, candidates, jobs]);
-
   const searchParams = useSearchParams();
   const applicationIdParam = searchParams.get("applicationId") ?? undefined;
 
-  const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
+  // The newest application opens by default. The picker searches the server
+  // rather than listing every application with every candidate and job.
+  const { data: newest, isFetched: newestFetched } = useQuery({
+    queryKey: ["applications", "options", "newest"],
+    queryFn: () => searchApplicationOptions(""),
+    enabled: !applicationIdParam,
+  });
+  const noApplications = newestFetched && (newest?.length ?? 0) === 0;
+
+  const [selectedId, setSelectedId] = useState<string | undefined>(applicationIdParam);
   useEffect(() => {
-    if (selectedId) return;
-    if (applicationIdParam && options.some((o) => o.applicationId === applicationIdParam)) {
-      setSelectedId(applicationIdParam);
-    } else if (options.length > 0) {
-      setSelectedId(options[0].applicationId);
-    }
-  }, [options, selectedId, applicationIdParam]);
+    if (!selectedId && newest && newest.length > 0) setSelectedId(newest[0].id);
+  }, [newest, selectedId]);
 
   const { data: latestReview, isLoading: reviewLoading } = useAiReview(selectedId);
   const [trackedEvaluationId, setTrackedEvaluationId] = useState<string | undefined>(undefined);
@@ -129,18 +105,14 @@ export function AIReviewClient() {
       breadcrumbs={[{ label: "Home", to: "/" }, { label: "AI Review" }]}
       actions={
         <>
-          <Select value={selectedId} onValueChange={setSelectedId}>
-            <SelectTrigger className="h-9 w-[280px]">
-              <SelectValue placeholder="Select an application" />
-            </SelectTrigger>
-            <SelectContent>
-              {options.map((o) => (
-                <SelectItem key={o.applicationId} value={o.applicationId}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="w-[320px]">
+            <EntityPicker
+              kind="applications"
+              value={selectedId ?? null}
+              onChange={(id) => setSelectedId(id ?? undefined)}
+              placeholder="Search candidate or job"
+            />
+          </div>
           <Button size="sm" onClick={handleRunAnalysis} disabled={!selectedId || isRunning}>
             {isRunning ? (
               <>
@@ -159,9 +131,11 @@ export function AIReviewClient() {
       {!selectedId || reviewLoading ? (
         <Card>
           <CardContent className="p-8 text-center text-sm text-muted-foreground">
-            {options.length === 0
+            {noApplications && !selectedId
               ? "No applications available yet. Create a job application first."
-              : "Loading…"}
+              : !selectedId
+                ? "Pick an application to review."
+                : "Loading…"}
           </CardContent>
         </Card>
       ) : !evaluation ? (

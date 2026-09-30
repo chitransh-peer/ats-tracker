@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,7 @@ from app.schemas.ai import AIEvaluationRead
 from app.schemas.application import (
     ApplicationCreate,
     ApplicationListItem,
+    ApplicationOption,
     ApplicationRead,
     ApplicationStageHistoryRead,
     BulkActionFailure,
@@ -34,11 +35,10 @@ def list_applications(
     job_id: uuid.UUID | None = None,
     candidate_id: uuid.UUID | None = None,
     status: str | None = None,
-    # Pagination is opt-in here rather than always-on: several pages (pipeline
-    # board, interviews, offers, onboarding, dashboard) still fetch every
-    # application to build client-side lookup maps, and defaulting this to a
-    # small page size would silently truncate them. Pass `page_size` to page
-    # through the results; omit it to get the existing capped "all" behavior.
+    search: str | None = None,
+    # Pagination is opt-in: every list page passes `page_size`. Omitting it
+    # returns up to 2,000 rows, for callers with a narrow filter such as one
+    # candidate's applications.
     page_size: int | None = None,
     offset: int = 0,
     current_user: CurrentUser = Depends(require_permission(PermissionResource.APPLICATION, PermissionAction.READ)),
@@ -47,7 +47,12 @@ def list_applications(
     if page_size is not None:
         page_size = max(1, min(page_size, MAX_LIMIT))
         query = application_service.build_applications_query(
-            current_user.organization_id, job_id=job_id, candidate_id=candidate_id, status=status, viewer=current_user
+            current_user.organization_id,
+            job_id=job_id,
+            candidate_id=candidate_id,
+            status=status,
+            search=search,
+            viewer=current_user,
         )
         total = db.scalar(select(func.count()).select_from(query.order_by(None).subquery())) or 0
         applications = list(db.scalars(query.limit(page_size).offset(offset)).unique().all())
@@ -57,15 +62,38 @@ def list_applications(
             db, current_user.organization_id, job_id=job_id, candidate_id=candidate_id, status=status, viewer=current_user
         )
 
-    scores = ai_evaluation_service.latest_scores(db, current_user.organization_id, [a.id for a in applications])
+    ids = [a.id for a in applications]
+    scores = ai_evaluation_service.latest_scores(db, current_user.organization_id, ids)
+    labels = application_service.application_labels(db, ids)
     items: list[ApplicationListItem] = []
     for application in applications:
         score, recommendation = scores.get(application.id, (None, None))
         item = ApplicationListItem.model_validate(application)
         item.ai_score = score
         item.ai_recommendation = recommendation
+        label = labels.get(application.id, {})
+        item.candidate_name = label.get("candidate_name")
+        item.job_title = label.get("job_title")
+        item.job_req_id = label.get("job_req_id")
         items.append(item)
     return items
+
+
+@router.get("/options", response_model=list[ApplicationOption])
+def application_options(
+    search: str | None = None,
+    status: str | None = None,
+    ids: list[uuid.UUID] = Query(default=[]),
+    limit: int = Query(default=20, ge=1, le=50),
+    current_user: CurrentUser = Depends(require_permission(PermissionResource.APPLICATION, PermissionAction.READ)),
+    db: Session = Depends(get_db_session),
+) -> list[ApplicationOption]:
+    """Type-to-search "candidate — job" matches, for the pickers that used to
+    load every application, candidate and job to fill a dropdown."""
+    rows = application_service.application_options(
+        db, current_user.organization_id, search=search, status=status, ids=ids, limit=limit, viewer=current_user
+    )
+    return [ApplicationOption(id=aid, candidate_name=name, job_title=title) for aid, name, title in rows]
 
 
 @router.post("", response_model=ApplicationRead, status_code=201)

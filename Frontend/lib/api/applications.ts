@@ -1,10 +1,12 @@
 import { apiClient } from "./client";
-import type { Application, ApplicationStageHistoryEntry } from "./types";
+import type { Application, ApplicationOption, ApplicationStageHistoryEntry } from "./types";
 
 export interface ApplicationFilters {
   job_id?: string;
   candidate_id?: string;
   status?: string;
+  /** Candidate name or job title. */
+  search?: string;
   page_size?: number;
   offset?: number;
 }
@@ -23,8 +25,8 @@ export function listApplications(filters: ApplicationFilters = {}) {
 }
 
 /** Paginated variant for the Applications grid. Server-side pagination is
- * opt-in on this endpoint (see the backend route) so it doesn't disturb the
- * many pages that still fetch every application for client-side lookups. */
+ * opt-in on this endpoint (see the backend route); the unpaged form is for
+ * narrow filters such as one candidate's applications. */
 export function listApplicationsPage(filters: ApplicationFilters = {}) {
   return apiClient.getPage<Application>(
     `/applications${buildQuery({
@@ -33,6 +35,16 @@ export function listApplicationsPage(filters: ApplicationFilters = {}) {
       offset: filters.offset?.toString(),
     })}`,
   );
+}
+
+/** Up to 20 "candidate — job" matches for `search`, or exactly `ids`. */
+export function searchApplicationOptions(search: string, ids: string[] = [], status?: string) {
+  const query = new URLSearchParams();
+  if (search) query.set("search", search);
+  if (status) query.set("status", status);
+  for (const id of ids) query.append("ids", id);
+  const qs = query.toString();
+  return apiClient.get<ApplicationOption[]>(`/applications/options${qs ? `?${qs}` : ""}`);
 }
 
 export function createApplication(input: {

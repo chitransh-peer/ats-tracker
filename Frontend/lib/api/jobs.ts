@@ -2,6 +2,8 @@ import { apiClient } from "./client";
 import type {
   Job,
   JobCreateInput,
+  JobOption,
+  JobSummary,
   JobCustomField,
   JobCustomFieldInput,
   JobDocument,
@@ -17,6 +19,9 @@ export interface JobFilters {
   department?: string;
   client_id?: string;
   recruiter_id?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
 }
 
 function buildQuery(params: object): string {
@@ -28,8 +33,36 @@ function buildQuery(params: object): string {
   return qs ? `?${qs}` : "";
 }
 
+function jobQuery(filters: JobFilters): string {
+  return buildQuery({
+    ...filters,
+    limit: filters.limit?.toString(),
+    offset: filters.offset?.toString(),
+  });
+}
+
+/** One page of jobs (50 unless `limit` says otherwise, 200 at most). */
 export function listJobs(filters: JobFilters = {}) {
-  return apiClient.get<Job[]>(`/jobs${buildQuery(filters)}`);
+  return apiClient.get<Job[]>(`/jobs${jobQuery(filters)}`);
+}
+
+/** One page of jobs plus the total matching, for a pager. */
+export function listJobsPage(filters: JobFilters = {}) {
+  return apiClient.getPage<Job>(`/jobs${jobQuery(filters)}`);
+}
+
+export function getJobSummary() {
+  return apiClient.get<JobSummary>("/jobs/summary");
+}
+
+/** Up to 20 jobs matching `search` (title, job code, client), or exactly `ids`. */
+export function searchJobOptions(search: string, ids: string[] = [], status?: string) {
+  const query = new URLSearchParams();
+  if (search) query.set("search", search);
+  if (status) query.set("status", status);
+  for (const id of ids) query.append("ids", id);
+  const qs = query.toString();
+  return apiClient.get<JobOption[]>(`/jobs/options${qs ? `?${qs}` : ""}`);
 }
 
 export function getJob(jobId: string) {

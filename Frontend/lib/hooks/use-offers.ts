@@ -8,6 +8,18 @@ export function useOffers(filters: offersApi.OfferFilters = {}) {
   });
 }
 
+export function useOffersPage(filters: offersApi.OfferFilters = {}) {
+  return useQuery({
+    queryKey: ["offers", "page", filters],
+    queryFn: () => offersApi.listOffersPage(filters),
+    placeholderData: (previous) => previous,
+  });
+}
+
+export function useOfferSummary() {
+  return useQuery({ queryKey: ["offers", "summary"], queryFn: offersApi.getOfferSummary });
+}
+
 export function useCreateOffer() {
   const queryClient = useQueryClient();
   return useMutation({
