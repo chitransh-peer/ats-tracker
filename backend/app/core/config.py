@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     # Seconds a request waits for a free connection before failing, rather than
     # hanging until Cloud Run's own timeout.
     db_pool_timeout: int = 15
+    # Seconds an API request may queue for one of the instance's database
+    # connections (app/core/db_gate.py) before it is answered 503.
+    db_gate_wait_timeout: float = 30
     redis_url: str = "redis://localhost:6379/0"
 
     jwt_secret: str

@@ -10,6 +10,7 @@ from sqlalchemy.exc import DataError
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
+from app.core.db_gate import DatabaseRequestGate
 from app.core.logging import configure_logging
 from app.core.rate_limit import limiter
 
@@ -54,6 +55,12 @@ app = FastAPI(
     openapi_url="/openapi.json" if _docs_enabled else None,
 )
 
+# Innermost, so a 503 from the gate still passes through CORS on its way out.
+app.add_middleware(
+    DatabaseRequestGate,
+    slots=settings.db_pool_size + settings.db_max_overflow,
+    wait_timeout=settings.db_gate_wait_timeout,
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,

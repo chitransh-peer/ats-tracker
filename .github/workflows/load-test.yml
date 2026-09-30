@@ -1,0 +1,147 @@
+name: Load test
+
+# Run by hand, in three steps:
+#   1. seed     fills a separate "Load Test" organization with production-scale
+#               data (100k candidates, 50k vendors, 10k clients, 120k
+#               applications, 20 recruiters). No real record is touched.
+#   2. run      20 recruiters use the live app at once for the chosen time;
+#               fails if any page's 95th percentile is over 1 second.
+#   3. cleanup  deletes the Load Test organization and everything in it.
+#
+# Seeding and cleanup need the database, which is reachable only from inside
+# Cloud Run, so they run as a one-off Cloud Run Job on the backend's current
+# image. Deploy the backend first so that image has the load-test scripts.
+#
+# Needs the repository secret LOADTEST_PASSWORD (12+ characters): the password
+# the load-test recruiters are created with and sign in with.
+
+on:
+  workflow_dispatch:
+    inputs:
+      step:
+        description: "What to do"
+        type: choice
+        options: [run, seed, cleanup]
+        default: run
+      users:
+        description: "Recruiters working at once (run)"
+        default: "20"
+      duration:
+        description: "Seconds to run for (run)"
+        default: "300"
+      scale:
+        description: "Fraction of the full data volume (seed)"
+        default: "1.0"
+
+env:
+  PROJECT_ID: "peer-website-504716"
+  REGION: "us-central1"
+  SERVICE_NAME: "ats-backend"
+  JOB_NAME: "ats-loadtest-seed"
+  CLOUDSQL_INSTANCE: "peer-website-504716:us-central1:ats-db-instance"
+  API_URL: "https://ats-backend-665490213826.us-central1.run.app/api/v1"
+
+concurrency:
+  group: load-test
+  cancel-in-progress: false
+
+jobs:
+  data:
+    if: inputs.step != 'run'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the load-test password is configured
+        if: inputs.step == 'seed'
+        env:
+          LOADTEST_PASSWORD: ${{ secrets.LOADTEST_PASSWORD }}
+        run: |
+          if [ "${#LOADTEST_PASSWORD}" -lt 12 ]; then
+            echo "::error::Set the repository secret LOADTEST_PASSWORD (12+ characters)."
+            exit 1
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Create or update the seed job on the backend's current image
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          LOADTEST_PASSWORD: ${{ secrets.LOADTEST_PASSWORD }}
+          STEP: ${{ inputs.step }}
+          SCALE: ${{ inputs.scale }}
+        run: |
+          IMAGE=$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" \
+            --format='value(spec.template.spec.containers[0].image)')
+          echo "Using image $IMAGE"
+
+          # JSON is valid YAML, and json.dump quotes every value safely.
+          ENV_FILE="$RUNNER_TEMP/loadtest-env.yaml"
+          python3 - "$ENV_FILE" <<'PY'
+          import json, os, sys
+          env = {
+              "APP_ENV": "production",
+              "DATABASE_URL": "postgresql+psycopg://ats:%s@/ats_tracker?host=/cloudsql/%s"
+              % (os.environ["DB_PASSWORD"], os.environ["CLOUDSQL_INSTANCE"]),
+              "JWT_SECRET": os.environ["JWT_SECRET"],
+              "LOADTEST_PASSWORD": os.environ.get("LOADTEST_PASSWORD", ""),
+          }
+          json.dump(env, open(sys.argv[1], "w"))
+          PY
+
+          if [ "$STEP" = "cleanup" ]; then ARGS="-m,scripts.loadtest_seed,--delete"
+          else ARGS="-m,scripts.loadtest_seed,--scale,$SCALE"; fi
+
+          gcloud run jobs deploy "$JOB_NAME" \
+            --image "$IMAGE" \
+            --region "$REGION" \
+            --set-cloudsql-instances "$CLOUDSQL_INSTANCE" \
+            --env-vars-file "$ENV_FILE" \
+            --command python \
+            --args "$ARGS" \
+            --cpu 1 --memory 2Gi \
+            --task-timeout 3600 \
+            --max-retries 0 \
+            --quiet
+
+      - name: Run it
+        run: gcloud run jobs execute "$JOB_NAME" --region "$REGION" --wait
+
+      - name: Remove the job after cleanup
+        if: inputs.step == 'cleanup'
+        run: gcloud run jobs delete "$JOB_NAME" --region "$REGION" --quiet
+
+  run:
+    if: inputs.step == 'run'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install "httpx==0.28.*"
+
+      - name: Load test
+        env:
+          LOADTEST_PASSWORD: ${{ secrets.LOADTEST_PASSWORD }}
+        run: |
+          python -m scripts.loadtest_run \
+            --base-url "$API_URL" \
+            --users "${{ inputs.users }}" \
+            --duration "${{ inputs.duration }}" \
+            --report "$RUNNER_TEMP/load-test.md"
+
+      - name: Show the result on the run page
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/load-test.md" ]; then cat "$RUNNER_TEMP/load-test.md" >> "$GITHUB_STEP_SUMMARY"; fi
