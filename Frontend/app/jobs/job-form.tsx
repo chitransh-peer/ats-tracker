@@ -46,7 +46,14 @@ import { cn } from "@/lib/utils";
 
 const NONE = "__none__";
 
-type FormState = JobCreateInput & { title: string };
+// Openings is null while the field is cleared mid-edit; submit refuses that.
+type FormState = Omit<JobCreateInput, "openings"> & { title: string; openings: number | null };
+
+// Mirrors the upper bounds in backend/app/schemas/job.py.
+const MAX_RATE = 100_000_000;
+const MAX_EXPERIENCE_YEARS = 70;
+const MAX_COUNT = 10_000;
+const MAX_TURNAROUND = 9_999;
 
 function todayIso(): string {
   const now = new Date();
@@ -67,6 +74,7 @@ function checkNumbers(form: FormState, job?: Job): string | null {
     if (lo !== null && hi !== null && lo > hi)
       return `${label} minimum cannot be more than the maximum.`;
   }
+  if (!form.openings || form.openings < 1) return "Number of positions must be at least 1.";
   if (
     form.respond_by === "Specific Date" &&
     form.respond_by_date &&
@@ -569,12 +577,14 @@ export function JobForm({ job }: { job?: Job }) {
                   </Select>
                   <NumberInput
                     decimals={2}
+                    max={MAX_RATE}
                     placeholder="Min"
                     value={form.client_bill_rate_min}
                     onValueChange={(v) => set("client_bill_rate_min", v)}
                   />
                   <NumberInput
                     decimals={2}
+                    max={MAX_RATE}
                     placeholder="Max"
                     value={form.client_bill_rate_max}
                     onValueChange={(v) => set("client_bill_rate_max", v)}
@@ -623,11 +633,13 @@ export function JobForm({ job }: { job?: Job }) {
                     </SelectContent>
                   </Select>
                   <NumberInput
+                    max={MAX_RATE}
                     placeholder="Min"
                     value={form.pay_min}
                     onValueChange={(v) => set("pay_min", v === null ? null : Number(v))}
                   />
                   <NumberInput
+                    max={MAX_RATE}
                     placeholder="Max"
                     value={form.pay_max}
                     onValueChange={(v) => set("pay_max", v === null ? null : Number(v))}
@@ -811,6 +823,7 @@ export function JobForm({ job }: { job?: Job }) {
                     />
                   ) : (
                     <NumberInput
+                      max={MAX_TURNAROUND}
                       value={
                         form.turnaround_time_value === null ||
                         form.turnaround_time_value === undefined
@@ -954,22 +967,20 @@ export function JobForm({ job }: { job?: Job }) {
               </Field>
               <Field label="Experience (years)" required>
                 <div className="grid grid-cols-2 gap-2">
-                  <Input
-                    type="number"
-                    min={0}
+                  <NumberInput
+                    max={MAX_EXPERIENCE_YEARS}
                     placeholder="Min"
-                    value={form.experience_min_years ?? ""}
-                    onChange={(e) =>
-                      set("experience_min_years", e.target.value ? Number(e.target.value) : null)
+                    value={form.experience_min_years}
+                    onValueChange={(v) =>
+                      set("experience_min_years", v === null ? null : Number(v))
                     }
                   />
-                  <Input
-                    type="number"
-                    min={0}
+                  <NumberInput
+                    max={MAX_EXPERIENCE_YEARS}
                     placeholder="Max"
-                    value={form.experience_max_years ?? ""}
-                    onChange={(e) =>
-                      set("experience_max_years", e.target.value ? Number(e.target.value) : null)
+                    value={form.experience_max_years}
+                    onValueChange={(v) =>
+                      set("experience_max_years", v === null ? null : Number(v))
                     }
                   />
                 </div>
@@ -998,21 +1009,18 @@ export function JobForm({ job }: { job?: Job }) {
             <h2 className="text-base font-semibold">Organizational Information</h2>
             <div className="grid lg:grid-cols-3 gap-4">
               <Field label="Number of Positions" required>
-                <Input
-                  type="number"
-                  min={1}
-                  value={form.openings ?? 1}
-                  onChange={(e) => set("openings", Number(e.target.value))}
-                  required
+                <NumberInput
+                  max={MAX_COUNT}
+                  value={form.openings}
+                  onValueChange={(v) => set("openings", v === null ? null : Number(v))}
                 />
               </Field>
               <Field label="Maximum Allowed Submissions">
-                <Input
-                  type="number"
-                  min={0}
-                  value={form.max_allowed_submissions ?? ""}
-                  onChange={(e) =>
-                    set("max_allowed_submissions", e.target.value ? Number(e.target.value) : null)
+                <NumberInput
+                  max={MAX_COUNT}
+                  value={form.max_allowed_submissions}
+                  onValueChange={(v) =>
+                    set("max_allowed_submissions", v === null ? null : Number(v))
                   }
                 />
               </Field>

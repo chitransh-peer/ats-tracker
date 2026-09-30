@@ -103,3 +103,27 @@ def test_recruiters_can_see_names_for_the_job_owner_pickers(client, make_user, a
     # Names only: the full user list, with emails and roles, stays admin-only.
     assert set(options.json()[0]) == {"id", "full_name"}
     assert client.get("/api/v1/users", headers=headers).status_code == 403
+
+
+def test_numbers_too_large_to_store_are_refused_with_a_message(client, make_user, auth_headers):
+    """A pay rate past the 32-bit column used to reach the database and come
+    back as a bare 500 ("integer out of range")."""
+    headers = _recruiter(make_user, auth_headers)
+
+    too_big = _create(client, headers, pay_max=9_876_543_210)
+    assert too_big.status_code == 422
+    assert "Pay rate maximum cannot be more than 100,000,000" in too_big.text
+    assert _create(client, headers, openings=50_000).status_code == 422
+    assert _create(client, headers, experience_min_years=300).status_code == 422
+    assert _create(client, headers, pay_max=250_000, openings=3).status_code == 201
+
+
+def test_a_value_the_database_cannot_hold_is_a_422_not_a_500(client, make_user, auth_headers):
+    """The safety net for any field without its own bound: text past a
+    column's length is the caller's input, not a server fault."""
+    headers = _recruiter(make_user, auth_headers)
+
+    response = _create(client, headers, department="x" * 500)
+
+    assert response.status_code == 422
+    assert "too large or too long" in response.text
