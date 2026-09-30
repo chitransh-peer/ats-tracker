@@ -23,6 +23,7 @@ import {
 import {
   useAddJobNote,
   useJob,
+  useJobAction,
   useJobDocuments,
   useJobNotes,
   useJobSubmissions,
@@ -40,6 +41,8 @@ import { COUNTRIES } from "@/lib/api/clients";
 import type { JobSearchCriteriaInput } from "@/lib/api/types";
 import { Briefcase, MapPin, Plus, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { ApiError } from "@/lib/api/client";
 
 function formatDateTime(value: string | null | undefined) {
   if (!value) return "—";
@@ -141,6 +144,7 @@ export function JobDetailClient() {
   const jobId = params.jobId;
 
   const { data: job, isLoading } = useJob(jobId);
+  const jobActions = useJobAction(jobId);
   const { data: submissions } = useJobSubmissions(jobId);
   const { data: notes } = useJobNotes(jobId);
   const { data: documents } = useJobDocuments(jobId);
@@ -243,9 +247,12 @@ export function JobDetailClient() {
         { label: job.req_id },
       ]}
       actions={
-        <Button size="sm" variant="outline" asChild>
-          <Link href={`/jobs/${job.id}/edit`}>Edit Job</Link>
-        </Button>
+        <>
+          <JobStatusActions status={job.status} actions={jobActions} />
+          <Button size="sm" variant="outline" asChild>
+            <Link href={`/jobs/${job.id}/edit`}>Edit Job</Link>
+          </Button>
+        </>
       }
     >
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-6 items-start">
@@ -1044,5 +1051,77 @@ export function JobDetailClient() {
         </Card>
       </div>
     </AppShell>
+  );
+}
+
+type JobActions = ReturnType<typeof useJobAction>;
+
+/** The status moves the server allows from where the job is now: publish a
+ *  draft, hold or close an active job, resume a held one, cancel either. */
+function JobStatusActions({ status, actions }: { status: string; actions: JobActions }) {
+  const busy = Object.values(actions).some((a) => a.isPending);
+  function run(action: JobActions[keyof JobActions], done: string) {
+    action.mutate(undefined, {
+      onSuccess: () => toast.success(done),
+      onError: (err) =>
+        toast.error(err instanceof ApiError ? err.message : "Could not change the job status."),
+    });
+  }
+
+  return (
+    <>
+      {status === "Draft" && (
+        <Button
+          size="sm"
+          disabled={busy}
+          onClick={() => run(actions.publish, "Job is now active.")}
+        >
+          Publish
+        </Button>
+      )}
+      {status === "On Hold" && (
+        <Button
+          size="sm"
+          disabled={busy}
+          onClick={() => run(actions.publish, "Job is active again.")}
+        >
+          Resume
+        </Button>
+      )}
+      {status === "Active" && (
+        <>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => run(actions.hold, "Job put on hold.")}
+          >
+            Put on hold
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => run(actions.close, "Job closed.")}
+          >
+            Close
+          </Button>
+        </>
+      )}
+      {(status === "Active" || status === "On Hold" || status === "Draft") && (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busy}
+          onClick={() => {
+            if (window.confirm("Cancel this job? A cancelled job cannot be reopened.")) {
+              run(actions.cancel, "Job cancelled.");
+            }
+          }}
+        >
+          Cancel job
+        </Button>
+      )}
+    </>
   );
 }
