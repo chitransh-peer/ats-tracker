@@ -5,6 +5,11 @@ This module answers the finer-grained question a role check alone can't:
 "is this specific record theirs". Super Admin, Admin, Executive, and Recruiter
 are unscoped (unchanged, org-wide visibility). Hiring Manager and Interviewer
 are restricted to records tied to jobs/interviews they own or sit on.
+Candidate (the self-service role) sees published jobs and its own
+applications only.
+
+Every scope filter denies by default: a scoped viewer with no rule for a
+resource sees none of it, never all of it.
 """
 
 from app.core.enums import RoleName
@@ -16,12 +21,12 @@ _UNSCOPED_ROLES = {
     RoleName.RECRUITER.value,
 }
 
-_SCOPED_ROLES = (RoleName.HIRING_MANAGER.value, RoleName.INTERVIEWER.value)
+_SCOPED_ROLES = (RoleName.HIRING_MANAGER.value, RoleName.INTERVIEWER.value, RoleName.CANDIDATE.value)
 
 
 def scoped_roles(roles: list[str]) -> set[str]:
-    """Subset of {"hiring_manager", "interviewer"} restricting this viewer's
-    visibility, or an empty set if they hold any org-wide role."""
+    """Subset of {"hiring_manager", "interviewer", "candidate"} restricting
+    this viewer's visibility, or an empty set if they hold any org-wide role."""
     if any(role in _UNSCOPED_ROLES for role in roles):
         return set()
     return {role for role in _SCOPED_ROLES if role in roles}

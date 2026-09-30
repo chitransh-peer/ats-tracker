@@ -2,7 +2,7 @@ import secrets
 import uuid
 from datetime import UTC, date, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import false, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.enums import ApplicationStatus, JobStatus, RoleName
@@ -38,7 +38,12 @@ def _scope_filter(query, viewer: CurrentUser | None):
                 .where(InterviewPanelMember.user_id == viewer.id)
             )
         )
-    return query.where(or_(*conditions))
+    if RoleName.CANDIDATE.value in scopes:
+        # The self-service role sees what the public careers page shows, not
+        # drafts, held or closed requisitions.
+        conditions.append(Job.status == JobStatus.ACTIVE.value)
+    # false() first: with no condition for this viewer's roles, nothing matches.
+    return query.where(or_(false(), *conditions))
 
 
 _VALID_TRANSITIONS: dict[str, set[str]] = {

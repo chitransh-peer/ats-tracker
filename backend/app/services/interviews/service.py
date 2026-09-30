@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import false, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.enums import RoleName
@@ -31,7 +31,8 @@ def _scope_filter(query, viewer: CurrentUser | None):
         conditions.append(
             Interview.id.in_(select(InterviewPanelMember.interview_id).where(InterviewPanelMember.user_id == viewer.id))
         )
-    return query.where(or_(*conditions))
+    # false() first: with no condition for this viewer's roles, nothing matches.
+    return query.where(or_(false(), *conditions))
 
 
 def _load(query):

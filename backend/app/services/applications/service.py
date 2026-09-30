@@ -1,15 +1,18 @@
 import uuid
 
-from sqlalchemy import or_, select
+from sqlalchemy import false, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.enums import RoleName
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.scoping import scoped_roles
 from app.db.models.application import Application, ApplicationStageHistory
+from app.db.models.candidate import Candidate
 from app.db.models.interview import Interview, InterviewPanelMember
 from app.db.models.job import Job
+from app.db.models.user import User
 from app.schemas.auth import CurrentUser
+from app.services.jobs.service import get_job
 
 
 def _scope_filter(query, viewer: CurrentUser | None):
@@ -30,7 +33,44 @@ def _scope_filter(query, viewer: CurrentUser | None):
                 .where(InterviewPanelMember.user_id == viewer.id)
             )
         )
-    return query.where(or_(*conditions))
+    if RoleName.CANDIDATE.value in scopes:
+        # A candidate's login and their candidate record share an email address
+        # within the organization; that is the only link between the two.
+        conditions.append(
+            Application.candidate_id.in_(
+                select(Candidate.id)
+                .join(
+                    User,
+                    (func.lower(User.email) == func.lower(Candidate.email))
+                    & (User.organization_id == Candidate.organization_id),
+                )
+                .where(User.id == viewer.id, Candidate.email.is_not(None))
+            )
+        )
+    # false() first: with no condition for this viewer's roles, nothing matches.
+    return query.where(or_(false(), *conditions))
+
+
+def check_viewer_may_apply(
+    db: Session, organization_id: uuid.UUID, *, candidate_id: uuid.UUID, job_id: uuid.UUID, viewer: CurrentUser
+) -> None:
+    """A scoped viewer may only apply as themselves, to a job they can see.
+
+    Only the Candidate role is both scoped and allowed to create applications;
+    without this it could file an application for any candidate record."""
+    if not scoped_roles(viewer.roles):
+        return
+    own_candidate = db.scalar(
+        select(Candidate.id)
+        .join(
+            User,
+            (func.lower(User.email) == func.lower(Candidate.email)) & (User.organization_id == Candidate.organization_id),
+        )
+        .where(User.id == viewer.id, Candidate.id == candidate_id, Candidate.organization_id == organization_id)
+    )
+    if own_candidate is None:
+        raise NotFoundError("Candidate not found")
+    get_job(db, organization_id, job_id, viewer=viewer)
 
 
 def create_application(

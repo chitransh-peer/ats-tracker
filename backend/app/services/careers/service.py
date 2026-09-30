@@ -62,6 +62,11 @@ def apply_to_job(
         raise NotFoundError("Job not found")
 
     candidate = db.scalar(select(Candidate).where(Candidate.organization_id == organization_id, Candidate.email == email))
+    # Nothing proves the person filling in this public form owns the email they
+    # typed. For a new candidate that does not matter; for an existing one it
+    # would let anyone replace a real candidate's résumé, and through parsing
+    # their profile, just by knowing their address.
+    existing_candidate = candidate is not None
     if candidate is None:
         candidate = Candidate(
             organization_id=organization_id, full_name=full_name, email=email, phone=phone, source="Careers Page"
@@ -75,15 +80,28 @@ def apply_to_job(
 
     document = None
     if resume_bytes and resume_file_name and resume_content_type:
-        document = add_document(
-            db,
-            candidate,
-            document_type=CandidateDocumentType.RESUME.value,
-            file_name=resume_file_name,
-            content_type=resume_content_type,
-            data=resume_bytes,
-            uploaded_by=None,
-        )
+        if existing_candidate:
+            # Kept for a recruiter to look at, but not as their résumé and not
+            # parsed into their record: the upload is unverified.
+            add_document(
+                db,
+                candidate,
+                document_type=CandidateDocumentType.OTHER.value,
+                file_name=f"Unverified careers-page upload - {resume_file_name}",
+                content_type=resume_content_type,
+                data=resume_bytes,
+                uploaded_by=None,
+            )
+        else:
+            document = add_document(
+                db,
+                candidate,
+                document_type=CandidateDocumentType.RESUME.value,
+                file_name=resume_file_name,
+                content_type=resume_content_type,
+                data=resume_bytes,
+                uploaded_by=None,
+            )
 
     # Kick off AI review automatically so every careers-page applicant gets a score.
     # Imported here to avoid a service<->worker import cycle at module load.

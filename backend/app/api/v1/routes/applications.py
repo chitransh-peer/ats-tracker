@@ -74,6 +74,13 @@ def create_application(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.APPLICATION, PermissionAction.CREATE)),
     db: Session = Depends(get_db_session),
 ) -> ApplicationRead:
+    application_service.check_viewer_may_apply(
+        db,
+        current_user.organization_id,
+        candidate_id=payload.candidate_id,
+        job_id=payload.job_id,
+        viewer=current_user,
+    )
     application = application_service.create_application(
         db,
         organization_id=current_user.organization_id,
@@ -118,6 +125,9 @@ def get_ai_review(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.AI_EVALUATION, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> AIEvaluationRead:
+    # Through the viewer's scope first: AI read is granted org-wide, the
+    # application it scores is not.
+    application_service.get_application(db, current_user.organization_id, application_id, viewer=current_user)
     return ai_evaluation_service.get_latest_evaluation(db, current_user.organization_id, application_id)
 
 
