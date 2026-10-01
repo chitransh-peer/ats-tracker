@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { requestQuickCreate } from "@/lib/hooks/use-quick-create";
 import { useEffect, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import {
@@ -122,6 +123,13 @@ const nav: NavSection[] = [
       { to: "/settings", label: "Settings", icon: Settings, roles: ADMIN_ONLY },
     ],
   },
+];
+
+/** Quick Create entries whose page opens a "new" dialog. */
+const QUICK_CREATE_DIALOGS = [
+  { label: "Candidate", path: "/candidates" },
+  { label: "Interview", path: "/interviews" },
+  { label: "Email template", path: "/templates" },
 ];
 
 export function AppShell({
@@ -284,10 +292,19 @@ export function AppShell({
                 <DropdownMenuItem asChild>
                   <Link href="/jobs/new">Job requisition</Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem>Candidate</DropdownMenuItem>
-                <DropdownMenuItem>Interview</DropdownMenuItem>
-                <DropdownMenuItem>Note</DropdownMenuItem>
-                <DropdownMenuItem>Email template</DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/clients/new">Client</Link>
+                </DropdownMenuItem>
+                {QUICK_CREATE_DIALOGS.map(({ label, path }) => (
+                  <DropdownMenuItem
+                    key={path}
+                    onSelect={() =>
+                      pathname === path ? requestQuickCreate() : router.push(`${path}?new=1`)
+                    }
+                  >
+                    {label}
+                  </DropdownMenuItem>
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
             <Button variant="ghost" size="icon" className="relative">

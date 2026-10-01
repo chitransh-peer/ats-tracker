@@ -42,14 +42,12 @@ def test_required_hours_per_week_must_be_0_to_168(client, make_user, auth_header
     assert _create(client, headers, required_hours_per_week=40).status_code == 201
 
 
-def test_respond_by_date_cannot_be_in_the_past(client, make_user, auth_headers):
+def test_respond_by_date_can_be_past_or_future(client, make_user, auth_headers):
     headers = _recruiter(make_user, auth_headers)
     yesterday = (date.today() - timedelta(days=1)).isoformat()
     next_week = (date.today() + timedelta(days=7)).isoformat()
 
-    past = _create(client, headers, respond_by="Specific Date", respond_by_date=yesterday)
-    assert past.status_code == 422
-    assert "cannot be in the past" in past.text
+    assert _create(client, headers, respond_by="Specific Date", respond_by_date=yesterday).status_code == 201
     assert _create(client, headers, respond_by="Specific Date", respond_by_date=next_week).status_code == 201
 
 
