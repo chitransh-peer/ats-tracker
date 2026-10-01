@@ -76,8 +76,8 @@ export function getConsolidatedFeedback(interviewId: string) {
 }
 
 /** How an interview mode reads on screen. "Video" is stored for existing
- * interviews and shown as "Virtual Round". */
+ * interviews and shown as "Visual Round". */
 export function interviewModeLabel(mode: string | null | undefined): string {
   if (!mode) return "";
-  return mode === "Video" ? "Virtual Round" : mode;
+  return mode === "Video" ? "Visual Round" : mode;
 }

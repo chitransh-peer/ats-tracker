@@ -1,7 +1,8 @@
 "use client";
 
 import { ImportExportButtons } from "@/components/import-export";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useQuickCreate } from "@/lib/hooks/use-quick-create";
 import Link from "next/link";
 import { toast } from "sonner";
 import { AppShell, StatCard } from "@/components/layout/AppShell";
@@ -36,6 +37,7 @@ import { ApiError } from "@/lib/api/client";
 
 function AddCandidateDialog() {
   const [open, setOpen] = useState(false);
+  useQuickCreate(useCallback(() => setOpen(true), []));
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");

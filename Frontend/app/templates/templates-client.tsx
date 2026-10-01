@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuickCreate } from "@/lib/hooks/use-quick-create";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,7 @@ const TOKENS = [
 
 function NewTemplateDialog({ onCreated }: { onCreated: (t: Template) => void }) {
   const [open, setOpen] = useState(false);
+  useQuickCreate(useCallback(() => setOpen(true), []));
   const [name, setName] = useState("");
   const [type, setType] = useState<string>(TEMPLATE_TYPES[0]);
   const [subject, setSubject] = useState("");

@@ -1,7 +1,8 @@
 "use client";
 
 import { interviewModeLabel } from "@/lib/api/interviews";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useQuickCreate } from "@/lib/hooks/use-quick-create";
 import Link from "next/link";
 import { AppShell, StatCard } from "@/components/layout/AppShell";
 import {
@@ -40,6 +41,7 @@ const modeIcon = { Video, Phone, Onsite: MapPin } as const;
 
 function ScheduleInterviewDialog() {
   const [open, setOpen] = useState(false);
+  useQuickCreate(useCallback(() => setOpen(true), []));
   const [applicationId, setApplicationId] = useState("");
   const [roundName, setRoundName] = useState("Recruiter Screen");
   const [mode, setMode] = useState("Video");
@@ -100,7 +102,7 @@ function ScheduleInterviewDialog() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Video">Virtual Round</SelectItem>
+                  <SelectItem value="Video">Visual Round</SelectItem>
                   <SelectItem value="Phone">Phone</SelectItem>
                   <SelectItem value="Onsite">Onsite</SelectItem>
                 </SelectContent>

@@ -1,6 +1,6 @@
 import secrets
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import Select, false, func, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -70,13 +70,6 @@ def _generate_slug(title: str) -> str:
     return f"{slugify(title)}-{secrets.token_hex(3)}"
 
 
-def _check_respond_by_date(value: date | None, current: date | None = None) -> None:
-    """A respond-by date is a deadline, so it cannot be set in the past. A job
-    already carrying a past date can still be edited without changing it."""
-    if value is not None and value != current and value < date.today():
-        raise ValidationAppError("The respond-by date cannot be in the past.")
-
-
 def create_job(
     db: Session,
     *,
@@ -87,7 +80,6 @@ def create_job(
     search_criteria: dict | None = None,
     **fields,
 ) -> Job:
-    _check_respond_by_date(fields.get("respond_by_date"))
     stage_template = seed_default_stage_template(db, organization_id)
 
     job = Job(
@@ -226,7 +218,6 @@ def job_options(
 
 
 def update_job(db: Session, job: Job, *, actor_id: uuid.UUID | None, **fields) -> Job:
-    _check_respond_by_date(fields.get("respond_by_date"), job.respond_by_date)
     for key, value in fields.items():
         if value is not None:
             setattr(job, key, value)

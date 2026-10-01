@@ -55,13 +55,8 @@ const MAX_EXPERIENCE_YEARS = 70;
 const MAX_COUNT = 10_000;
 const MAX_TURNAROUND = 9_999;
 
-function todayIso(): string {
-  const now = new Date();
-  return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-}
-
 /** The number rules the server also enforces, caught before the round trip. */
-function checkNumbers(form: FormState, job?: Job): string | null {
+function checkNumbers(form: FormState): string | null {
   const num = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
   const pairs: [unknown, unknown, string][] = [
     [form.pay_min, form.pay_max, "Pay rate"],
@@ -75,14 +70,6 @@ function checkNumbers(form: FormState, job?: Job): string | null {
       return `${label} minimum cannot be more than the maximum.`;
   }
   if (!form.openings || form.openings < 1) return "Number of positions must be at least 1.";
-  if (
-    form.respond_by === "Specific Date" &&
-    form.respond_by_date &&
-    form.respond_by_date < todayIso() &&
-    form.respond_by_date !== job?.respond_by_date
-  ) {
-    return "The respond-by date cannot be in the past.";
-  }
   return null;
 }
 
@@ -163,7 +150,7 @@ function initialState(job?: Job): FormState {
     respond_by: job?.respond_by ?? "Open Until Filled",
     respond_by_date: job?.respond_by_date ?? null,
     turnaround_time_value: job?.turnaround_time_value ?? null,
-    turnaround_time_unit: job?.turnaround_time_unit ?? "In Days",
+    turnaround_time_unit: job?.turnaround_time_unit ?? "In Hours",
 
     pay_min: job?.pay_min ?? null,
     pay_max: job?.pay_max ?? null,
@@ -301,9 +288,13 @@ function ChipInput({
 }) {
   const [draft, setDraft] = useState("");
 
+  /** "a, b, c" adds three entries. */
   function commit() {
-    const entry = draft.trim();
-    if (entry && !value.includes(entry)) onChange([...value, entry]);
+    const entries = draft
+      .split(",")
+      .map((e) => e.trim())
+      .filter((e, i, all) => e && !value.includes(e) && all.indexOf(e) === i);
+    if (entries.length) onChange([...value, ...entries]);
     setDraft("");
   }
 
@@ -407,6 +398,7 @@ export function JobForm({ job }: { job?: Job }) {
   const { data: users } = useUserOptions();
 
   const [error, setError] = useState<string | null>(null);
+  const [stateQuery, setStateQuery] = useState("");
   const [form, setForm] = useState<FormState>(() => initialState(job));
 
   const userOptions = useMemo(
@@ -443,15 +435,16 @@ export function JobForm({ job }: { job?: Job }) {
       setError("Job title is required.");
       return;
     }
-    if (!form.client_id) {
+    // A new job is saved as a draft, which only needs a title.
+    if (isEdit && !form.client_id) {
       setError("Client is required.");
       return;
     }
-    if (!form.required_skills?.length) {
+    if (isEdit && !form.required_skills?.length) {
       setError("At least one primary skill is required.");
       return;
     }
-    const problem = checkNumbers(form, job);
+    const problem = checkNumbers(form);
     if (problem) {
       setError(problem);
       return;
@@ -692,7 +685,6 @@ export function JobForm({ job }: { job?: Job }) {
                   <Field label="Respond by date">
                     <Input
                       type="date"
-                      min={todayIso()}
                       value={form.respond_by_date ?? ""}
                       onChange={(e) => set("respond_by_date", e.target.value || null)}
                     />
@@ -734,9 +726,17 @@ export function JobForm({ job }: { job?: Job }) {
                 </Select>
               </Field>
               <Field label="States" required>
+                <Input
+                  className="mb-2 h-8"
+                  placeholder="Search states…"
+                  value={stateQuery}
+                  onChange={(e) => setStateQuery(e.target.value)}
+                />
                 <div className="max-h-32 overflow-y-auto rounded-md border p-2">
                   <ChipMultiSelect
-                    options={US_STATES}
+                    options={US_STATES.filter((st) =>
+                      st.toLowerCase().includes(stateQuery.trim().toLowerCase()),
+                    )}
                     selected={form.states ?? []}
                     onToggle={(o) => toggleIn("states", o)}
                   />
@@ -965,7 +965,7 @@ export function JobForm({ job }: { job?: Job }) {
                   options={DEGREE_OPTIONS.map((d) => ({ value: d, label: d }))}
                 />
               </Field>
-              <Field label="Experience (years)" required>
+              <Field label="Experience (years)">
                 <div className="grid grid-cols-2 gap-2">
                   <NumberInput
                     max={MAX_EXPERIENCE_YEARS}
