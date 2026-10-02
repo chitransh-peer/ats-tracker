@@ -15,6 +15,7 @@ from app.core.file_validation import (
     validate_document_size,
     validate_resume_upload,
 )
+from tests.careers_form import application_form, resume_file
 
 _REAL_PDF = b"%PDF-1.4\n%mock content for a test\n%%EOF"
 _REAL_DOCX = b"PK\x03\x04" + b"\x00" * 20  # a real docx is a zip; this is enough for the signature check
@@ -123,8 +124,8 @@ def test_careers_apply_rejects_a_fake_resume(client, make_user, auth_headers, or
 
     response = client.post(
         f"/api/v1/careers/{organization.slug}/jobs/{job['id']}/apply",
-        data={"full_name": "Applicant", "email": "applicant@example.com"},
-        files={"resume": ("resume.pdf", _FAKE_PDF, "application/pdf")},
+        data=application_form("Applicant", "applicant@example.com"),
+        files=resume_file(_FAKE_PDF),
     )
 
     assert response.status_code == 422

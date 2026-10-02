@@ -335,6 +335,8 @@ export interface Application {
   source: string | null;
   status: string;
   applied_at: string;
+  /** Careers-page form answers; empty for applications added by a recruiter. */
+  answers?: { section: string; question: string; answer: string }[];
   ai_score?: number | null;
   ai_recommendation?: string | null;
   /** Filled in on list reads, so a page need not look every candidate and job up. */

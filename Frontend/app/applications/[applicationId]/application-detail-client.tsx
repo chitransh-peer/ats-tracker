@@ -187,6 +187,33 @@ export function ApplicationDetailClient() {
             </CardContent>
           </Card>
 
+          {application.answers && application.answers.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Application answers</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {Array.from(new Set(application.answers.map((a) => a.section))).map((section) => (
+                  <div key={section}>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {section}
+                    </div>
+                    <dl className="mt-2 grid gap-x-4 gap-y-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+                      {application
+                        .answers!.filter((a) => a.section === section)
+                        .map((a) => (
+                          <div key={a.question} className="contents">
+                            <dt className="text-xs text-muted-foreground">{a.question}</dt>
+                            <dd className="text-sm whitespace-pre-wrap break-words">{a.answer}</dd>
+                          </div>
+                        ))}
+                    </dl>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           {!isTerminal && (
             <Card>
               <CardHeader className="pb-2">
