@@ -10,6 +10,7 @@ import pytest
 
 from app.core.enums import RoleName
 from app.core.rate_limit import limiter
+from tests.careers_form import application_form, resume_file
 
 
 @pytest.fixture
@@ -66,7 +67,8 @@ def test_careers_apply_is_rate_limited_per_ip(
     def _apply(n: int):
         return client.post(
             f"/api/v1/careers/{organization.slug}/jobs/{job['id']}/apply",
-            data={"full_name": f"Applicant {n}", "email": f"applicant{n}@example.com"},
+            data=application_form(f"Applicant {n}", f"applicant{n}@example.com"),
+            files=resume_file(),
         ).status_code
 
     statuses = [_apply(n) for n in range(21)]

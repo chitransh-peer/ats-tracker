@@ -3,6 +3,14 @@ import { apiClient } from "./client";
 /** Slug of the organization whose careers page is public-facing. */
 export const CAREERS_ORG_SLUG = process.env.NEXT_PUBLIC_CAREERS_ORG_SLUG ?? "peer-consulting";
 
+export interface ApplicationQuestion {
+  key: string;
+  label: string;
+  type: "text" | "textarea" | "number" | "yesno";
+  required: boolean;
+  placeholder: string | null;
+}
+
 export interface PublicJob {
   id: string;
   slug: string;
@@ -20,6 +28,10 @@ export interface PublicJob {
   education: string | null;
   screening_questions: string[];
   posted_at: string | null;
+  /** The JD-dependent section of the application form. */
+  role_questions: ApplicationQuestion[];
+  ask_portfolio_links: boolean;
+  ask_sponsorship: boolean;
 }
 
 export interface PublicOrganization {
@@ -41,15 +53,44 @@ export function listPublicJobs(slug: string = CAREERS_ORG_SLUG) {
   return apiClient.get<PublicJob[]>(`/careers/${slug}/jobs`);
 }
 
+/** Every field on the careers-page form; optional ones may be left blank. */
+export interface ApplyInput {
+  full_name: string;
+  email: string;
+  phone: string;
+  location: string;
+  current_title: string;
+  current_company: string;
+  total_experience_years: string;
+  relevant_experience_years: string;
+  linkedin_url: string;
+  portfolio_url: string;
+  github_url: string;
+  highest_qualification: string;
+  college: string;
+  graduation_year: string;
+  notice_period: string;
+  earliest_joining_date: string;
+  current_ctc: string;
+  expected_ctc: string;
+  work_arrangement_ok: string;
+  heard_from: string;
+  work_authorized: string;
+  needs_sponsorship: string;
+}
+
 export function applyToJob(
   jobId: string,
-  input: { full_name: string; email: string; phone?: string; resume?: File | null },
+  input: ApplyInput,
+  roleAnswers: Record<string, string>,
+  resume: File,
   slug: string = CAREERS_ORG_SLUG,
 ) {
   const form = new FormData();
-  form.set("full_name", input.full_name);
-  form.set("email", input.email);
-  if (input.phone) form.set("phone", input.phone);
-  if (input.resume) form.set("resume", input.resume);
+  for (const [key, value] of Object.entries(input)) {
+    if (value.trim()) form.set(key, value.trim());
+  }
+  form.set("role_answers", JSON.stringify(roleAnswers));
+  form.set("resume", resume);
   return apiClient.postForm<PublicApplyResponse>(`/careers/${slug}/jobs/${jobId}/apply`, form);
 }

@@ -11,6 +11,7 @@ from app.db.models.candidate import CandidateDocument
 from app.services.ai import evaluation as evaluation_service
 from app.services.ai import resume_parsing as resume_parsing_service
 from app.services.candidates.service import add_document
+from tests.careers_form import application_form
 
 
 def test_a_hiring_manager_cannot_read_ai_scores_for_someone_elses_job(
@@ -104,7 +105,7 @@ def test_a_careers_page_upload_cannot_replace_an_existing_candidates_resume(
 
     response = client.post(
         f"/api/v1/careers/{organization.slug}/jobs/{job['id']}/apply",
-        data={"full_name": "Not Them", "email": "known.person@example.com"},
+        data=application_form("Not Them", "known.person@example.com"),
         files={"resume": ("resume.pdf", _blank_pdf(), "application/pdf")},
     )
 

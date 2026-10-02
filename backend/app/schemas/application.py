@@ -10,6 +10,12 @@ class ApplicationCreate(BaseModel):
     source: str | None = None
 
 
+class ApplicationAnswer(BaseModel):
+    section: str
+    question: str
+    answer: str
+
+
 class ApplicationRead(BaseModel):
     id: uuid.UUID
     organization_id: uuid.UUID
@@ -19,6 +25,8 @@ class ApplicationRead(BaseModel):
     source: str | None
     status: str
     applied_at: datetime
+    # What the candidate filled in on the careers-page form; empty otherwise.
+    answers: list[ApplicationAnswer] = []
 
     model_config = {"from_attributes": True}
 

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import ApplicationStatus
@@ -29,6 +29,9 @@ class Application(TimestampMixin, Base):
     source: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=ApplicationStatus.ACTIVE.value)
     applied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    # Careers-page form answers as [{section, question, answer}], kept as asked
+    # so a recruiter sees the wording the candidate saw.
+    answers: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
 
     candidate: Mapped["Candidate"] = relationship()
     job: Mapped["Job"] = relationship()

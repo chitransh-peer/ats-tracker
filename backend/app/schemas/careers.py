@@ -4,6 +4,14 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
+class ApplicationQuestion(BaseModel):
+    key: str
+    label: str
+    type: str  # text | textarea | number | yesno
+    required: bool
+    placeholder: str | None = None
+
+
 class PublicJobRead(BaseModel):
     id: uuid.UUID
     slug: str
@@ -21,6 +29,10 @@ class PublicJobRead(BaseModel):
     education: str | None
     screening_questions: list[str]
     posted_at: datetime | None
+    # The JD-dependent part of the application form, built per request.
+    role_questions: list[ApplicationQuestion] = []
+    ask_portfolio_links: bool = False
+    ask_sponsorship: bool = False
 
     model_config = {"from_attributes": True}
 
