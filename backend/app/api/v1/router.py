@@ -8,6 +8,7 @@ from app.api.v1.routes import (
     bench,
     candidates,
     careers,
+    ceipal,
     clients,
     hotlists,
     imports,
@@ -30,6 +31,8 @@ api_router.include_router(users.router)
 api_router.include_router(roles.router)
 api_router.include_router(clients.router)
 api_router.include_router(vendors.router)
+# Before imports: GET /imports/ceipal must not be read as /imports/{job_id}.
+api_router.include_router(ceipal.router)
 api_router.include_router(imports.router)
 api_router.include_router(jobs.router)
 api_router.include_router(candidates.router)

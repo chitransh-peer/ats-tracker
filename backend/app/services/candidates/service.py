@@ -128,6 +128,7 @@ def build_candidates_query(
     talent_pool_only: bool = False,
     search: str | None = None,
     viewer: CurrentUser | None = None,
+    origin: str | None = None,
 ):
     """Filters + scoping only, unexecuted — shared by the paginated route and
     any caller that still needs the full result set (dropdowns, ID-lookup
@@ -138,6 +139,8 @@ def build_candidates_query(
         query = query.where(Candidate.status == status)
     if talent_pool_only:
         query = query.where(Candidate.status.in_(_TALENT_POOL_STATUSES))
+    if origin is not None:
+        query = query.where(Candidate.origin == origin)
     if search:
         like = f"%{search}%"
         query = query.where((Candidate.full_name.ilike(like)) | (Candidate.email.ilike(like)))

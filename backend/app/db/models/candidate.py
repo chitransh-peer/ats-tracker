@@ -28,6 +28,10 @@ class Candidate(TimestampMixin, AuditedByMixin, SoftDeleteMixin, Base):
     # Applicant ID), so re-importing the same export matches instead of
     # duplicating.
     external_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Where the record came from when that changes how it is treated: "ceipal"
+    # for candidates brought in from a Ceipal backup. Those were vetted in
+    # Ceipal already and are never scored or parsed by AI here.
+    origin: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     current_company: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -49,6 +53,9 @@ class Candidate(TimestampMixin, AuditedByMixin, SoftDeleteMixin, Base):
     tags: Mapped[list["CandidateTag"]] = relationship(back_populates="candidate", cascade="all, delete-orphan")
     notes: Mapped[list["CandidateNote"]] = relationship(back_populates="candidate", cascade="all, delete-orphan")
     documents: Mapped[list["CandidateDocument"]] = relationship(back_populates="candidate", cascade="all, delete-orphan")
+    ceipal_profile: Mapped["CeipalProfile | None"] = relationship(  # noqa: F821
+        back_populates="candidate", uselist=False, cascade="all, delete-orphan"
+    )
 
 
 class CandidateEducation(Base):

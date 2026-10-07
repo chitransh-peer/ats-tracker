@@ -11,6 +11,7 @@ from app.db.models.candidate import (
     CandidateTag,
     DuplicateCandidateLink,
 )
+from app.db.models.ceipal import CeipalImport, CeipalProfile, CeipalRow
 from app.db.models.client import (
     Client,
     ClientAccount,
@@ -51,6 +52,9 @@ from app.db.models.vendor import (
 
 __all__ = [
     "Base",
+    "CeipalImport",
+    "CeipalProfile",
+    "CeipalRow",
     "ImportJob",
     "ImportPreset",
     "ImportRow",

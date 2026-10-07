@@ -107,6 +107,8 @@ class CandidateRead(BaseModel):
     work_auth: str | None
     relocation_ok: bool
     status: str
+    # "ceipal" for candidates imported from Ceipal: verified there, never AI-scored.
+    origin: str | None = None
     education: list[EducationItem]
     tags: list[str]
     created_at: datetime

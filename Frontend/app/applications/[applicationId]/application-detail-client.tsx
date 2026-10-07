@@ -421,7 +421,12 @@ export function ApplicationDetailClient() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {!aiReview ? (
+              {candidate?.origin === "ceipal" ? (
+                <p className="text-sm text-muted-foreground">
+                  Imported from Ceipal, where this candidate was already verified. AI scoring
+                  doesn&apos;t run for Ceipal candidates.
+                </p>
+              ) : !aiReview ? (
                 <p className="text-sm text-muted-foreground">
                   No AI evaluation has run for this application yet.
                 </p>
