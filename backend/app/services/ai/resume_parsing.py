@@ -11,6 +11,7 @@ from app.core.exceptions import NotFoundError
 from app.db.models.ai import ParsedResume, ResumeParseRun
 from app.db.models.candidate import Candidate, CandidateDocument
 from app.services.ai.provider import AIProviderError, current_model_name, generate_structured
+from app.services.ceipal.rules import NOT_SCORED_MESSAGE, ensure_ai_allowed, is_ceipal
 from app.services.storage.service import download_bytes
 
 _RESUME_EXTRACTION_PROMPT = """You are a resume parser. Extract structured fields from the \
@@ -77,6 +78,7 @@ def create_pending_run(
     document = db.get(CandidateDocument, document_id)
     if document is None or document.candidate_id != candidate_id:
         raise NotFoundError("Candidate document not found")
+    ensure_ai_allowed(db.get(Candidate, candidate_id))
 
     run = ResumeParseRun(
         organization_id=organization_id,
@@ -95,6 +97,13 @@ def parse_resume(db: Session, run: ResumeParseRun) -> ResumeParseRun:
     db.commit()
 
     document = db.get(CandidateDocument, run.document_id)
+    if is_ceipal(db.get(Candidate, run.candidate_id)):
+        run.status = ResumeParseStatus.FAILED.value
+        run.error_message = NOT_SCORED_MESSAGE
+        run.completed_at = datetime.now(UTC)
+        db.commit()
+        db.refresh(run)
+        return run
     if document is None:
         run.status = ResumeParseStatus.FAILED.value
         run.error_message = "Candidate document was deleted before parsing could run"

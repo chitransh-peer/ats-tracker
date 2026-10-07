@@ -50,6 +50,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { initialsOf, relativeTime } from "@/lib/utils";
+import { CeipalTab } from "./ceipal-tab";
 
 /** Fill the merge tokens we can resolve from the current context. Anything we
  *  can't resolve is left visible so the recruiter notices before sending. */
@@ -289,6 +290,8 @@ export function CandidateDetailClient() {
     (applications ?? []).map((a) => [a.job_id, { id: a.job_id, title: a.job_title ?? "Role" }]),
   );
   const stageById = new Map((stageTemplate?.stages ?? []).map((s) => [s.id, s.name]));
+  // Imported from Ceipal: vetted there, so never AI-scored here.
+  const isCeipal = candidate.origin === "ceipal";
   const candidateInterviews = interviews ?? [];
 
   async function handleAddNote(e: React.FormEvent) {
@@ -323,6 +326,14 @@ export function CandidateDetailClient() {
                     <Badge variant="secondary" className="text-[10px]">
                       {candidate.status}
                     </Badge>
+                    {isCeipal && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] border-emerald-200 bg-emerald-50 text-emerald-700"
+                      >
+                        From Ceipal
+                      </Badge>
+                    )}
                     {candidate.tags.map((t) => (
                       <Badge key={t} variant="outline" className="text-[10px]">
                         {t}
@@ -367,8 +378,9 @@ export function CandidateDetailClient() {
             </CardContent>
           </Card>
 
-          <Tabs defaultValue="profile">
+          <Tabs defaultValue={isCeipal ? "ceipal" : "profile"}>
             <TabsList>
+              {isCeipal && <TabsTrigger value="ceipal">Ceipal</TabsTrigger>}
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="applications">Applications</TabsTrigger>
               <TabsTrigger value="interviews">Interviews</TabsTrigger>
@@ -376,6 +388,12 @@ export function CandidateDetailClient() {
               <TabsTrigger value="messages">Messages</TabsTrigger>
               <TabsTrigger value="notes">Notes</TabsTrigger>
             </TabsList>
+
+            {isCeipal && (
+              <TabsContent value="ceipal" className="mt-4">
+                <CeipalTab candidateId={candidateId} />
+              </TabsContent>
+            )}
 
             <TabsContent value="profile" className="mt-4 space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
@@ -593,38 +611,51 @@ export function CandidateDetailClient() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {(applications ?? []).length === 0 && (
+              {isCeipal ? (
                 <p className="text-sm text-muted-foreground">
-                  No applications yet — AI scoring runs automatically once this candidate applies.
+                  Imported from Ceipal, where this candidate was already verified. AI scoring
+                  doesn&apos;t run for Ceipal candidates.
                 </p>
-              )}
-              {(applications ?? []).map((app) => {
-                const job = jobById.get(app.job_id);
-                const score = typeof app.ai_score === "number" ? Math.round(app.ai_score) : null;
-                return (
-                  <div key={app.id} className="rounded-md border p-3 space-y-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium truncate">{job?.title ?? "Role"}</span>
-                      {score !== null ? (
-                        <ScorePill score={score} />
-                      ) : (
-                        <span className="text-[11px] text-muted-foreground">Pending</span>
-                      )}
-                    </div>
-                    {app.ai_recommendation && (
-                      <div className="text-xs text-muted-foreground capitalize">
-                        {app.ai_recommendation.replace(/_/g, " ")}
+              ) : (
+                <>
+                  {(applications ?? []).length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No applications yet — AI scoring runs automatically once this candidate
+                      applies.
+                    </p>
+                  )}
+                  {(applications ?? []).map((app) => {
+                    const job = jobById.get(app.job_id);
+                    const score =
+                      typeof app.ai_score === "number" ? Math.round(app.ai_score) : null;
+                    return (
+                      <div key={app.id} className="rounded-md border p-3 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-medium truncate">
+                            {job?.title ?? "Role"}
+                          </span>
+                          {score !== null ? (
+                            <ScorePill score={score} />
+                          ) : (
+                            <span className="text-[11px] text-muted-foreground">Pending</span>
+                          )}
+                        </div>
+                        {app.ai_recommendation && (
+                          <div className="text-xs text-muted-foreground capitalize">
+                            {app.ai_recommendation.replace(/_/g, " ")}
+                          </div>
+                        )}
+                        <Link
+                          href={`/ai-review?applicationId=${app.id}`}
+                          className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                        >
+                          View full AI breakdown
+                        </Link>
                       </div>
-                    )}
-                    <Link
-                      href={`/ai-review?applicationId=${app.id}`}
-                      className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-                    >
-                      View full AI breakdown
-                    </Link>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </>
+              )}
             </CardContent>
           </Card>
         </aside>

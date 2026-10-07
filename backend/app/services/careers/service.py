@@ -15,6 +15,7 @@ from app.services.ai.resume_parsing import create_pending_run
 from app.services.applications.service import create_application
 from app.services.candidates.service import add_document
 from app.services.careers.questions import role_questions, wants_portfolio_links, wants_sponsorship_question
+from app.services.ceipal.rules import is_ceipal
 
 
 def list_published_jobs(db: Session, organization_id: uuid.UUID) -> list[Job]:
@@ -230,6 +231,11 @@ def apply_to_job(
     from app.services.ai.recovery import resume_stalled_work
     from app.workers.dispatch import dispatch_after_response
     from app.workers.tasks.ai import evaluate_application_task, parse_resume_task
+
+    # A candidate already brought in from Ceipal was vetted there and is never
+    # AI-scored, whichever way they apply.
+    if is_ceipal(candidate):
+        return application, candidate
 
     evaluation = create_pending_evaluation(db, organization_id=organization_id, application_id=application.id, actor_id=None)
     if document is not None:

@@ -273,6 +273,8 @@ export interface Candidate {
   work_auth: string | null;
   relocation_ok: boolean;
   status: string;
+  /** "ceipal" for candidates imported from Ceipal: verified there, never AI-scored. */
+  origin: string | null;
   education: EducationItem[];
   tags: string[];
   created_at: string;

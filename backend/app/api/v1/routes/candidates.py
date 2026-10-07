@@ -53,6 +53,7 @@ def _to_read(candidate, duplicate_warnings=None) -> CandidateRead:
         work_auth=candidate.work_auth,
         relocation_ok=candidate.relocation_ok,
         status=candidate.status,
+        origin=candidate.origin,
         education=[{"degree": e.degree, "school": e.school, "year": e.year} for e in candidate.education],
         tags=[t.tag for t in candidate.tags],
         created_at=candidate.created_at,
@@ -67,12 +68,13 @@ def list_candidates(
     status: str | None = None,
     pool: bool = False,
     search: str | None = None,
+    origin: str | None = None,
     pagination: PageParams = Depends(page_params),
     current_user: CurrentUser = Depends(require_permission(PermissionResource.CANDIDATE, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> list[CandidateRead]:
     query = candidate_service.build_candidates_query(
-        current_user.organization_id, status=status, talent_pool_only=pool, search=search, viewer=current_user
+        current_user.organization_id, status=status, talent_pool_only=pool, search=search, viewer=current_user, origin=origin
     )
     candidates, total = paginate(db, query, pagination)
     # Body stays a plain array for backward compatibility; the total rides on

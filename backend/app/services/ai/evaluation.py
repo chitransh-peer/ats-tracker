@@ -14,6 +14,7 @@ from app.db.models.candidate import Candidate
 from app.db.models.job import Job
 from app.services.ai.embeddings import embedding_similarity
 from app.services.ai.provider import AIProviderError, current_model_name, generate_structured
+from app.services.ceipal.rules import CEIPAL_ORIGIN, NOT_SCORED_MESSAGE, ensure_ai_allowed
 
 _SKILL_BUDGET = 80.0
 _EXPERIENCE_BUDGET = 20.0
@@ -354,6 +355,7 @@ def create_pending_evaluation(
     db: Session, *, organization_id: uuid.UUID, application_id: uuid.UUID, actor_id: uuid.UUID | None
 ) -> AIEvaluation:
     application = _load_application(db, organization_id, application_id)
+    ensure_ai_allowed(db.get(Candidate, application.candidate_id))
     next_version = (
         db.scalar(
             select(AIEvaluation.version)
@@ -384,6 +386,12 @@ def evaluate_application(db: Session, evaluation: AIEvaluation) -> AIEvaluation:
     application = db.get(Application, evaluation.application_id)
     job = db.get(Job, application.job_id)
     candidate = db.get(Candidate, application.candidate_id)
+    if candidate.origin == CEIPAL_ORIGIN:
+        # Queued before the candidate came in from Ceipal: never scored now.
+        evaluation.status = AIEvaluationStatus.FAILED.value
+        evaluation.error_message = NOT_SCORED_MESSAGE
+        db.commit()
+        return evaluation
     parsed_resume = _latest_parsed_resume(db, candidate.id)
 
     rule_result = rule_based_score(job, candidate, parsed_resume)

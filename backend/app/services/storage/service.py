@@ -93,3 +93,19 @@ def download_bytes(key: str) -> bytes:
 
     response = get_client().get_object(Bucket=settings.storage_bucket, Key=key)
     return response["Body"].read()
+
+
+def delete_object(key: str) -> None:
+    """Remove a stored file. Deleting one that is already gone is not an error:
+    undo may run twice over the same files."""
+    settings = get_settings()
+    if _use_gcs():
+        from google.api_core.exceptions import NotFound
+
+        try:
+            get_gcs_bucket().blob(key).delete()
+        except NotFound:
+            pass
+        return
+
+    get_client().delete_object(Bucket=settings.storage_bucket, Key=key)

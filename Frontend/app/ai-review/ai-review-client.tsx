@@ -6,6 +6,8 @@ import { useQuery } from "@tanstack/react-query";
 import { AppShell, StatCard, ScorePill } from "@/components/layout/AppShell";
 import { EntityPicker } from "@/components/entity-picker";
 import { searchApplicationOptions } from "@/lib/api/applications";
+import { useApplication } from "@/lib/hooks/use-applications";
+import { useCandidate } from "@/lib/hooks/use-candidates";
 import {
   useAiReview,
   useEvaluateApplication,
@@ -53,6 +55,11 @@ export function AIReviewClient() {
   useEffect(() => {
     if (!selectedId && newest && newest.length > 0) setSelectedId(newest[0].id);
   }, [newest, selectedId]);
+
+  // A candidate imported from Ceipal was verified there and is never AI-scored.
+  const { data: selectedApplication } = useApplication(selectedId);
+  const { data: selectedCandidate } = useCandidate(selectedApplication?.candidate_id);
+  const notScored = selectedCandidate?.origin === "ceipal";
 
   const { data: latestReview, isLoading: reviewLoading } = useAiReview(selectedId);
   const [trackedEvaluationId, setTrackedEvaluationId] = useState<string | undefined>(undefined);
@@ -113,7 +120,11 @@ export function AIReviewClient() {
               placeholder="Search candidate or job"
             />
           </div>
-          <Button size="sm" onClick={handleRunAnalysis} disabled={!selectedId || isRunning}>
+          <Button
+            size="sm"
+            onClick={handleRunAnalysis}
+            disabled={!selectedId || isRunning || notScored}
+          >
             {isRunning ? (
               <>
                 <Loader2 className="h-4 w-4 mr-1 animate-spin" />
@@ -136,6 +147,13 @@ export function AIReviewClient() {
               : !selectedId
                 ? "Pick an application to review."
                 : "Loading…"}
+          </CardContent>
+        </Card>
+      ) : notScored ? (
+        <Card>
+          <CardContent className="p-8 text-center text-sm text-muted-foreground">
+            {selectedCandidate?.full_name} was imported from Ceipal, where they were already
+            verified. AI scoring doesn&apos;t run for Ceipal candidates.
           </CardContent>
         </Card>
       ) : !evaluation ? (

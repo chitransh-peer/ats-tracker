@@ -1,6 +1,8 @@
 "use client";
 
 import { ImportExportButtons } from "@/components/import-export";
+import { CeipalImportButton } from "@/components/ceipal-import";
+import { CeipalCandidatesTable } from "./ceipal-candidates-table";
 import { useCallback, useState } from "react";
 import { useQuickCreate } from "@/lib/hooks/use-quick-create";
 import Link from "next/link";
@@ -20,6 +22,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -124,6 +127,9 @@ function AddCandidateDialog() {
 }
 
 const PAGE_SIZE = 50;
+// The "Ceipal" entry in the status dropdown: candidates imported from Ceipal,
+// shown in Ceipal's own columns.
+const CEIPAL_VIEW = "ceipal";
 
 export function CandidatesClient() {
   const [status, setStatus] = useState("all");
@@ -142,8 +148,9 @@ export function CandidatesClient() {
     setOffset(0);
   }
 
+  const ceipalView = status === CEIPAL_VIEW;
   const { data, isLoading } = useCandidatesPage({
-    status: status !== "all" ? status : undefined,
+    status: status !== "all" && !ceipalView ? status : undefined,
     search: search || undefined,
     limit: PAGE_SIZE,
     offset,
@@ -204,6 +211,7 @@ export function CandidatesClient() {
       actions={
         <>
           <ImportExportButtons entity="candidates" label="Candidates" />
+          <CeipalImportButton />
           <AddCandidateDialog />
         </>
       }
@@ -240,9 +248,11 @@ export function CandidatesClient() {
                 <SelectItem value="Passive">Passive</SelectItem>
                 <SelectItem value="Silver Medalist">Silver Medalist</SelectItem>
                 <SelectItem value="Do Not Contact">Do Not Contact</SelectItem>
+                <SelectSeparator />
+                <SelectItem value={CEIPAL_VIEW}>Ceipal</SelectItem>
               </SelectContent>
             </Select>
-            {selected.size > 0 && (
+            {selected.size > 0 && !ceipalView && (
               <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-1.5">
                 <span className="text-xs font-medium">{selected.size} selected</span>
                 <Button
@@ -267,102 +277,108 @@ export function CandidatesClient() {
             )}
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="p-3 w-10">
-                    <Checkbox
-                      checked={allOnPageSelected}
-                      onCheckedChange={(checked) => toggleAllOnPage(checked === true)}
-                      disabled={(candidates?.length ?? 0) === 0}
-                      aria-label="Select all candidates on this page"
-                    />
-                  </th>
-                  <th className="p-3 text-left font-medium">Candidate</th>
-                  <th className="p-3 text-left font-medium">Current</th>
-                  <th className="p-3 text-left font-medium">Location</th>
-                  <th className="p-3 text-left font-medium">Skills</th>
-                  <th className="p-3 text-left font-medium">Status</th>
-                  <th className="p-3 text-left font-medium">Source</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {isLoading && (
-                  <tr>
-                    <td colSpan={7} className="p-6 text-center text-sm text-muted-foreground">
-                      Loading candidates…
-                    </td>
-                  </tr>
-                )}
-                {!isLoading && (candidates?.length ?? 0) === 0 && (
-                  <tr>
-                    <td colSpan={7} className="p-6 text-center text-sm text-muted-foreground">
-                      No candidates yet.
-                    </td>
-                  </tr>
-                )}
-                {candidates?.map((c) => (
-                  <tr key={c.id} className="hover:bg-muted/30">
-                    <td className="p-3">
-                      <Checkbox
-                        checked={selected.has(c.id)}
-                        onCheckedChange={(checked) => toggleRow(c.id, checked === true)}
-                        aria-label={`Select ${c.full_name}`}
-                      />
-                    </td>
-                    <td className="p-3">
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback className="text-xs">
-                            {initialsOf(c.full_name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <Link
-                            href={`/candidates/${c.id}`}
-                            className="font-medium hover:underline"
-                          >
-                            {c.full_name}
-                          </Link>
-                          <div className="text-[11px] text-muted-foreground">{c.email}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="p-3 text-xs">
-                      <div className="font-medium">{c.current_title ?? "—"}</div>
-                      <div className="text-muted-foreground">
-                        {c.current_company ?? "—"}
-                        {c.total_experience_years ? ` · ${c.total_experience_years}y` : ""}
-                      </div>
-                    </td>
-                    <td className="p-3 text-xs text-muted-foreground">{c.location ?? "—"}</td>
-                    <td className="p-3">
-                      <div className="flex flex-wrap gap-1 max-w-[220px]">
-                        {c.skills.slice(0, 3).map((s) => (
-                          <Badge key={s} variant="secondary" className="text-[10px]">
-                            {s}
+          {ceipalView ? (
+            <CeipalCandidatesTable search={search} />
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
+                    <tr>
+                      <th className="p-3 w-10">
+                        <Checkbox
+                          checked={allOnPageSelected}
+                          onCheckedChange={(checked) => toggleAllOnPage(checked === true)}
+                          disabled={(candidates?.length ?? 0) === 0}
+                          aria-label="Select all candidates on this page"
+                        />
+                      </th>
+                      <th className="p-3 text-left font-medium">Candidate</th>
+                      <th className="p-3 text-left font-medium">Current</th>
+                      <th className="p-3 text-left font-medium">Location</th>
+                      <th className="p-3 text-left font-medium">Skills</th>
+                      <th className="p-3 text-left font-medium">Status</th>
+                      <th className="p-3 text-left font-medium">Source</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {isLoading && (
+                      <tr>
+                        <td colSpan={7} className="p-6 text-center text-sm text-muted-foreground">
+                          Loading candidates…
+                        </td>
+                      </tr>
+                    )}
+                    {!isLoading && (candidates?.length ?? 0) === 0 && (
+                      <tr>
+                        <td colSpan={7} className="p-6 text-center text-sm text-muted-foreground">
+                          No candidates yet.
+                        </td>
+                      </tr>
+                    )}
+                    {candidates?.map((c) => (
+                      <tr key={c.id} className="hover:bg-muted/30">
+                        <td className="p-3">
+                          <Checkbox
+                            checked={selected.has(c.id)}
+                            onCheckedChange={(checked) => toggleRow(c.id, checked === true)}
+                            aria-label={`Select ${c.full_name}`}
+                          />
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            <Avatar className="h-8 w-8">
+                              <AvatarFallback className="text-xs">
+                                {initialsOf(c.full_name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <Link
+                                href={`/candidates/${c.id}`}
+                                className="font-medium hover:underline"
+                              >
+                                {c.full_name}
+                              </Link>
+                              <div className="text-[11px] text-muted-foreground">{c.email}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-3 text-xs">
+                          <div className="font-medium">{c.current_title ?? "—"}</div>
+                          <div className="text-muted-foreground">
+                            {c.current_company ?? "—"}
+                            {c.total_experience_years ? ` · ${c.total_experience_years}y` : ""}
+                          </div>
+                        </td>
+                        <td className="p-3 text-xs text-muted-foreground">{c.location ?? "—"}</td>
+                        <td className="p-3">
+                          <div className="flex flex-wrap gap-1 max-w-[220px]">
+                            {c.skills.slice(0, 3).map((s) => (
+                              <Badge key={s} variant="secondary" className="text-[10px]">
+                                {s}
+                              </Badge>
+                            ))}
+                            {c.skills.length > 3 && (
+                              <Badge variant="outline" className="text-[10px]">
+                                +{c.skills.length - 3}
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <Badge variant="secondary" className="text-[10px]">
+                            {c.status}
                           </Badge>
-                        ))}
-                        {c.skills.length > 3 && (
-                          <Badge variant="outline" className="text-[10px]">
-                            +{c.skills.length - 3}
-                          </Badge>
-                        )}
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <Badge variant="secondary" className="text-[10px]">
-                        {c.status}
-                      </Badge>
-                    </td>
-                    <td className="p-3 text-xs text-muted-foreground">{c.source ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Pager offset={offset} limit={PAGE_SIZE} total={total} onOffsetChange={setOffset} />
+                        </td>
+                        <td className="p-3 text-xs text-muted-foreground">{c.source ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Pager offset={offset} limit={PAGE_SIZE} total={total} onOffsetChange={setOffset} />
+            </>
+          )}
         </CardContent>
       </Card>
     </AppShell>
