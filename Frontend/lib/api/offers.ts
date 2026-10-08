@@ -37,13 +37,50 @@ export function getOfferSummary() {
   return apiClient.get<OfferSummary>("/offers/summary");
 }
 
-export function createOffer(input: {
+export const OFFER_PAY_TYPES = ["Salary", "Hourly"] as const;
+export const OFFER_CURRENCIES = ["USD", "INR", "CAD", "GBP", "AUD"] as const;
+export const OFFER_EMPLOYMENT_TYPES = [
+  "Full-time",
+  "Part-time",
+  "Contract",
+  "Contract-to-hire",
+] as const;
+/** How the hire is engaged; mirrors OfferTaxTerm on the server. */
+export const OFFER_TAX_TERMS = ["W-2", "1099", "C2C", "India Payroll", "India Contract"] as const;
+
+export interface OfferInput {
   application_id: string;
-  base_salary: number;
+  pay_type: string;
+  base_salary?: number | null;
+  hourly_rate?: number | null;
+  currency: string;
+  employment_type?: string | null;
+  tax_term?: string | null;
+  contract_duration?: string | null;
   bonus?: number | null;
   equity?: string | null;
   joining_date?: string | null;
-}) {
+}
+
+/** An offer's pay as it reads on screen: "₹25,00,000 / yr" or "$85.00 / hr". */
+export function formatOfferPay(offer: {
+  pay_type: string;
+  base_salary: number | null;
+  hourly_rate: number | null;
+  currency: string;
+}): string {
+  const hourly = offer.pay_type === "Hourly";
+  const amount = hourly ? offer.hourly_rate : offer.base_salary;
+  if (amount == null) return "—";
+  const formatted = new Intl.NumberFormat(offer.currency === "INR" ? "en-IN" : "en-US", {
+    style: "currency",
+    currency: offer.currency || "USD",
+    maximumFractionDigits: hourly ? 2 : 0,
+  }).format(amount);
+  return `${formatted} / ${hourly ? "hr" : "yr"}`;
+}
+
+export function createOffer(input: OfferInput) {
   return apiClient.post<Offer>("/offers", input);
 }
 

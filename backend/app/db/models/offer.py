@@ -1,11 +1,12 @@
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.enums import OfferApprovalStatus, OfferStatus
+from app.core.enums import OfferApprovalStatus, OfferPayType, OfferStatus
 from app.db.base import AuditedByMixin, Base, TimestampMixin, uuid_pk
 
 
@@ -20,7 +21,15 @@ class Offer(TimestampMixin, AuditedByMixin, Base):
         UUID(as_uuid=True), ForeignKey("applications.id", ondelete="CASCADE"), nullable=False, index=True
     )
     status: Mapped[str] = mapped_column(String(30), nullable=False, default=OfferStatus.DRAFT.value)
-    base_salary: Mapped[int] = mapped_column(Integer, nullable=False)
+    # A salaried offer carries an annual base salary; an hourly one (W-2
+    # hourly, 1099 and C2C contracts) carries an hourly rate instead.
+    pay_type: Mapped[str] = mapped_column(String(10), nullable=False, default=OfferPayType.SALARY.value)
+    base_salary: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    hourly_rate: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
+    employment_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    tax_term: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    contract_duration: Mapped[str | None] = mapped_column(String(100), nullable=True)
     bonus: Mapped[int | None] = mapped_column(Integer, nullable=True)
     equity: Mapped[str | None] = mapped_column(String(100), nullable=True)
     joining_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -42,7 +51,13 @@ class OfferVersion(Base):
         UUID(as_uuid=True), ForeignKey("offers.id", ondelete="CASCADE"), nullable=False, index=True
     )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    base_salary: Mapped[int] = mapped_column(Integer, nullable=False)
+    pay_type: Mapped[str] = mapped_column(String(10), nullable=False, default=OfferPayType.SALARY.value)
+    base_salary: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    hourly_rate: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
+    employment_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    tax_term: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    contract_duration: Mapped[str | None] = mapped_column(String(100), nullable=True)
     bonus: Mapped[int | None] = mapped_column(Integer, nullable=True)
     equity: Mapped[str | None] = mapped_column(String(100), nullable=True)
     joining_date: Mapped[date | None] = mapped_column(Date, nullable=True)

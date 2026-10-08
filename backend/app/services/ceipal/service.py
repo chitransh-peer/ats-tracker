@@ -468,6 +468,10 @@ def process_next_chunk(db: Session, imp: CeipalImport) -> CeipalImport:
 
 def _import_applicant(db, imp, row, lookups, profiles, by_email, children, submission_notes) -> None:
     data = row.data
+    known = profiles.get(row.ref) if row.ref else None
+    if known is not None and known.edited_columns:
+        # A recruiter's correction outlives the next backup's copy of the field.
+        data = {**data, **{c: known.fields[c] for c in known.edited_columns if c in (known.fields or {})}}
     values = _candidate_values(data)
     if not row.ref:
         row.status, row.message = REJECTED, "No Id."
@@ -505,13 +509,19 @@ def _import_applicant(db, imp, row, lookups, profiles, by_email, children, submi
         created_candidate = True
         imp.created_count += 1
     else:
-        # Ceipal is the record of truth for a candidate it brought in; for one
-        # that was here first, it only fills what is missing.
+        # Ceipal is the record of truth for a candidate it brought in -- except
+        # for a field someone corrected here since the last import, which no
+        # longer matches what that import set. For a candidate that was here
+        # first, Ceipal only fills what is missing.
         overwrite = profile is not None
+        last_imported = _candidate_values(profile.fields or {}) if profile is not None else {}
         for field, value in values.items():
             if value in (None, "", []):
                 continue
-            if overwrite or not getattr(candidate, field):
+            current = getattr(candidate, field)
+            if not current:
+                setattr(candidate, field, value)
+            elif overwrite and current == last_imported.get(field):
                 setattr(candidate, field, value)
         candidate.updated_by = imp.created_by
         imp.updated_count += 1
@@ -894,6 +904,57 @@ def _application_in_use(db: Session, application: Application) -> bool:
 
 
 # ------------------------------------------------------------------ the Ceipal view
+
+
+# Which record this is and when Ceipal made it; corrected data, not these.
+READ_ONLY_COLUMNS = {"id", "applicant id", "record type", "created at", "modified at", "created by"}
+
+
+def edit_profile(
+    db: Session, profile: CeipalProfile, *, actor_id: uuid.UUID | None, values: dict[str, str]
+) -> CeipalProfile:
+    """Corrects a migrated Ceipal record. Only the Ceipal columns this view
+    shows can be set. The candidate fields drawn from those columns (name,
+    email, phone, location...) follow the correction, and the columns are
+    remembered so re-importing a later backup keeps it."""
+    columns = columns_for([profile])
+    by_lower = {c.lower(): c for c in columns}
+    unknown = [k for k in values if k.lower() not in by_lower]
+    if unknown:
+        raise ValidationAppError(f"Not a Ceipal column: {', '.join(sorted(unknown))}")
+    fixed = [k for k in values if k.lower() in READ_ONLY_COLUMNS]
+    if fixed:
+        raise ValidationAppError(f"Kept as Ceipal recorded it: {', '.join(sorted(fixed))}")
+
+    before = dict(profile.fields or {})
+    after = dict(before)
+    changed: list[str] = []
+    for key, value in values.items():
+        column = by_lower[key.lower()]
+        value = _nfc((value or "").strip())[:5000]
+        if before.get(column, "") != value:
+            after[column] = value
+            changed.append(column)
+    if not changed:
+        return profile
+
+    candidate = profile.candidate
+    old_values, new_values = _candidate_values(before), _candidate_values(after)
+    for field, value in new_values.items():
+        if value == old_values.get(field):
+            continue
+        if field == "full_name" and not value:
+            raise ValidationAppError("A candidate needs a name")
+        if field == "email" and value is None and get(after, "Email"):
+            raise ValidationAppError("That is not a valid email address")
+        setattr(candidate, field, value if value not in ("", []) or field == "skills" else None)
+    candidate.updated_by = actor_id
+
+    profile.fields = after
+    profile.edited_columns = sorted({*(profile.edited_columns or []), *changed})
+    db.commit()
+    db.refresh(profile)
+    return profile
 
 
 def columns_for(profiles: list[CeipalProfile]) -> list[str]:

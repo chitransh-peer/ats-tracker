@@ -39,6 +39,9 @@ class PermissionResource(str, enum.Enum):
     VENDOR = "vendor"
     TALENT_BENCH = "talent_bench"
     HOTLIST = "hotlist"
+    # Downloading original document files (résumés, contracts...). Viewing them
+    # in the in-app preview needs only read access to the record they hang off.
+    DOCUMENT_DOWNLOAD = "document_download"
 
 
 class InvitationStatus(str, enum.Enum):
@@ -246,6 +249,37 @@ class OfferStatus(str, enum.Enum):
     ACCEPTED = "Accepted"
     DECLINED = "Declined"
     EXPIRED = "Expired"
+
+
+class OfferPayType(str, enum.Enum):
+    SALARY = "Salary"
+    HOURLY = "Hourly"
+
+
+class OfferEmploymentType(str, enum.Enum):
+    FULL_TIME = "Full-time"
+    PART_TIME = "Part-time"
+    CONTRACT = "Contract"
+    CONTRACT_TO_HIRE = "Contract-to-hire"
+
+
+class OfferTaxTerm(str, enum.Enum):
+    """How the hire is engaged: US W-2 / 1099 / corp-to-corp, or on an Indian
+    payroll or contract."""
+
+    W2 = "W-2"
+    FORM_1099 = "1099"
+    C2C = "C2C"
+    INDIA_PAYROLL = "India Payroll"
+    INDIA_CONTRACT = "India Contract"
+
+
+class OfferCurrency(str, enum.Enum):
+    USD = "USD"
+    INR = "INR"
+    CAD = "CAD"
+    GBP = "GBP"
+    AUD = "AUD"
 
 
 class OfferApprovalStatus(str, enum.Enum):

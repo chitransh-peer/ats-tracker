@@ -11,6 +11,13 @@ import uuid
 from app.core.enums import RoleName
 
 
+def _admin_headers(make_user, auth_headers):
+    """Downloading the original is an admin permission by default; recruiters
+    upload and preview."""
+    admin, password = make_user(role_names=[RoleName.ADMIN.value])
+    return auth_headers(admin.email, password)
+
+
 def _upload(client, headers, candidate_id, *, content=b"%PDF-1.4 pretend resume", name="cv.pdf"):
     return client.post(
         f"/api/v1/candidates/{candidate_id}/documents",
@@ -34,7 +41,10 @@ def test_uploaded_resume_can_be_downloaded_again(client, make_user, auth_headers
     assert listed.status_code == 200
     assert [d["id"] for d in listed.json()] == [document_id]
 
-    downloaded = client.get(f"/api/v1/candidates/{candidate.id}/documents/{document_id}/download", headers=headers)
+    downloaded = client.get(
+        f"/api/v1/candidates/{candidate.id}/documents/{document_id}/download",
+        headers=_admin_headers(make_user, auth_headers),
+    )
     assert downloaded.status_code == 200
     assert downloaded.content == body
 
@@ -47,7 +57,10 @@ def test_download_is_always_an_attachment(client, make_user, auth_headers, make_
     candidate = make_candidate()
 
     document_id = _upload(client, headers, candidate.id).json()["id"]
-    response = client.get(f"/api/v1/candidates/{candidate.id}/documents/{document_id}/download", headers=headers)
+    response = client.get(
+        f"/api/v1/candidates/{candidate.id}/documents/{document_id}/download",
+        headers=_admin_headers(make_user, auth_headers),
+    )
 
     disposition = response.headers["content-disposition"]
     assert disposition.startswith("attachment;")
@@ -112,7 +125,10 @@ def test_a_non_ascii_filename_survives_the_round_trip(client, make_user, auth_he
     candidate = make_candidate()
 
     document_id = _upload(client, headers, candidate.id, name="Curriculum Vitæ ünïcode.pdf").json()["id"]
-    response = client.get(f"/api/v1/candidates/{candidate.id}/documents/{document_id}/download", headers=headers)
+    response = client.get(
+        f"/api/v1/candidates/{candidate.id}/documents/{document_id}/download",
+        headers=_admin_headers(make_user, auth_headers),
+    )
 
     assert response.status_code == 200
     # RFC 6266: the plain filename stays ASCII for old clients, and filename*
@@ -120,3 +136,103 @@ def test_a_non_ascii_filename_survives_the_round_trip(client, make_user, auth_he
     disposition = response.headers["content-disposition"]
     assert "filename*=UTF-8''" in disposition
     assert "%C3%A6" in disposition or "%C3%BC" in disposition
+
+
+def _real_pdf() -> bytes:
+    import io
+
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(612, 792)
+    writer.add_blank_page(612, 792)
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    return buffer.getvalue()
+
+
+def test_recruiter_cannot_download_but_can_preview(client, make_user, auth_headers, make_candidate):
+    """Recruiters read résumés in the app; taking a copy is refused."""
+    user, password = make_user(role_names=[RoleName.RECRUITER.value])
+    headers = auth_headers(user.email, password)
+    candidate = make_candidate()
+    pdf = _real_pdf()
+    document_id = _upload(client, headers, candidate.id, content=pdf).json()["id"]
+    base = f"/api/v1/candidates/{candidate.id}/documents/{document_id}"
+
+    refused = client.get(f"{base}/download", headers=headers)
+    assert refused.status_code == 403
+    assert refused.content != pdf
+
+    preview = client.get(f"{base}/preview", headers=headers)
+    assert preview.status_code == 200
+    body = preview.json()
+    assert body["kind"] == "pages"
+    assert body["page_count"] == 2
+    assert body["can_download"] is False
+    # Page images, not the file itself.
+    assert all(page["content_type"] == "image/png" for page in body["pages"])
+    assert b"%PDF" not in preview.content
+
+
+def test_view_only_roles_cannot_download(client, make_user, auth_headers, make_candidate):
+    recruiter, recruiter_password = make_user(role_names=[RoleName.RECRUITER.value])
+    candidate = make_candidate()
+    document_id = _upload(client, auth_headers(recruiter.email, recruiter_password), candidate.id).json()["id"]
+
+    executive, password = make_user(role_names=[RoleName.EXECUTIVE.value])
+    response = client.get(
+        f"/api/v1/candidates/{candidate.id}/documents/{document_id}/download",
+        headers=auth_headers(executive.email, password),
+    )
+    assert response.status_code == 403
+
+
+def test_admin_preview_offers_download(client, make_user, auth_headers, make_candidate):
+    user, password = make_user(role_names=[RoleName.RECRUITER.value])
+    candidate = make_candidate()
+    document_id = _upload(client, auth_headers(user.email, password), candidate.id, content=_real_pdf()).json()["id"]
+
+    response = client.get(
+        f"/api/v1/candidates/{candidate.id}/documents/{document_id}/preview",
+        headers=_admin_headers(make_user, auth_headers),
+    )
+    assert response.status_code == 200
+    assert response.json()["can_download"] is True
+
+
+def test_preview_is_scoped_like_the_record(client, make_user, auth_headers, make_candidate):
+    recruiter, recruiter_password = make_user(role_names=[RoleName.RECRUITER.value])
+    candidate = make_candidate()
+    document_id = _upload(client, auth_headers(recruiter.email, recruiter_password), candidate.id).json()["id"]
+
+    interviewer, password = make_user(role_names=[RoleName.INTERVIEWER.value])
+    response = client.get(
+        f"/api/v1/candidates/{candidate.id}/documents/{document_id}/preview",
+        headers=auth_headers(interviewer.email, password),
+    )
+    assert response.status_code == 404
+
+
+def test_unreadable_file_previews_as_unsupported(client, make_user, auth_headers, make_candidate):
+    user, password = make_user(role_names=[RoleName.RECRUITER.value])
+    headers = auth_headers(user.email, password)
+    candidate = make_candidate()
+    # Passes the upload's magic-byte check but is not a real PDF.
+    document_id = _upload(client, headers, candidate.id).json()["id"]
+
+    response = client.get(f"/api/v1/candidates/{candidate.id}/documents/{document_id}/preview", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["kind"] == "unsupported"
+
+
+def test_me_reports_whether_documents_can_be_downloaded(client, make_user, auth_headers):
+    recruiter, password = make_user(role_names=[RoleName.RECRUITER.value])
+    assert (
+        client.get("/api/v1/auth/me", headers=auth_headers(recruiter.email, password)).json()["can_download_documents"]
+        is False
+    )
+    assert (
+        client.get("/api/v1/auth/me", headers=_admin_headers(make_user, auth_headers)).json()["can_download_documents"]
+        is True
+    )

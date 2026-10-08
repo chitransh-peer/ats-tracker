@@ -1,23 +1,36 @@
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.schemas.application import ApplicationRefs
 
 
 class OfferCreate(BaseModel):
     application_id: uuid.UUID
-    base_salary: int
-    bonus: int | None = None
-    equity: str | None = None
+    pay_type: str = "Salary"
+    base_salary: int | None = Field(default=None, gt=0)
+    hourly_rate: Decimal | None = Field(default=None, gt=0, max_digits=10, decimal_places=2)
+    currency: str = "USD"
+    employment_type: str | None = None
+    tax_term: str | None = None
+    contract_duration: str | None = Field(default=None, max_length=100)
+    bonus: int | None = Field(default=None, ge=0)
+    equity: str | None = Field(default=None, max_length=100)
     joining_date: date | None = None
 
 
 class OfferUpdate(BaseModel):
-    base_salary: int | None = None
-    bonus: int | None = None
-    equity: str | None = None
+    pay_type: str | None = None
+    base_salary: int | None = Field(default=None, gt=0)
+    hourly_rate: Decimal | None = Field(default=None, gt=0, max_digits=10, decimal_places=2)
+    currency: str | None = None
+    employment_type: str | None = None
+    tax_term: str | None = None
+    contract_duration: str | None = Field(default=None, max_length=100)
+    bonus: int | None = Field(default=None, ge=0)
+    equity: str | None = Field(default=None, max_length=100)
     joining_date: date | None = None
 
 
@@ -28,7 +41,13 @@ class OfferApprovalDecision(BaseModel):
 class OfferVersionRead(BaseModel):
     id: uuid.UUID
     version_number: int
-    base_salary: int
+    pay_type: str
+    base_salary: int | None
+    hourly_rate: float | None
+    currency: str
+    employment_type: str | None
+    tax_term: str | None
+    contract_duration: str | None
     bonus: int | None
     equity: str | None
     joining_date: date | None
@@ -54,7 +73,13 @@ class OfferRead(ApplicationRefs):
     organization_id: uuid.UUID
     application_id: uuid.UUID
     status: str
-    base_salary: int
+    pay_type: str
+    base_salary: int | None
+    hourly_rate: float | None
+    currency: str
+    employment_type: str | None
+    tax_term: str | None
+    contract_duration: str | None
     bonus: int | None
     equity: str | None
     joining_date: date | None

@@ -36,6 +36,14 @@ import {
 import { Video, MapPin, Phone } from "lucide-react";
 import { initialsOf } from "@/lib/utils";
 import { ApiError } from "@/lib/api/client";
+import { InterviewerPicker } from "@/components/interviewer-picker";
+import {
+  INTERVIEW_TIMEZONES,
+  defaultTimezone,
+  formatForViewer,
+  formatInZone,
+  zonedToUtcIso,
+} from "@/lib/timezones";
 
 const modeIcon = { Video, Phone, Onsite: MapPin } as const;
 
@@ -46,22 +54,44 @@ function ScheduleInterviewDialog() {
   const [roundName, setRoundName] = useState("Recruiter Screen");
   const [mode, setMode] = useState("Video");
   const [scheduledAt, setScheduledAt] = useState("");
+  const [timezone, setTimezone] = useState(defaultTimezone);
+  const [duration, setDuration] = useState("60");
+  const [interviewers, setInterviewers] = useState<string[]>([]);
+  const [meetingLink, setMeetingLink] = useState("");
+  const [location, setLocation] = useState("");
   const [error, setError] = useState<string | null>(null);
   const createInterview = useCreateInterview();
+
+  // The slot as the other side of the US–India split will read it.
+  const preview = scheduledAt ? zonedToUtcIso(scheduledAt, timezone) : null;
+  const otherZone = timezone === "Asia/Kolkata" ? "America/New_York" : "Asia/Kolkata";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (interviewers.length === 0) {
+      setError("Add at least one interviewer.");
+      return;
+    }
     try {
       await createInterview.mutateAsync({
         application_id: applicationId,
         round_name: roundName,
         mode,
-        scheduled_at: new Date(scheduledAt).toISOString(),
+        scheduled_at: zonedToUtcIso(scheduledAt, timezone),
+        timezone,
+        duration_minutes: Number(duration),
+        panel_user_ids: interviewers,
+        primary_interviewer_id: interviewers[0],
+        meeting_link: mode === "Onsite" ? null : meetingLink.trim() || null,
+        location: mode === "Onsite" ? location.trim() || null : null,
       });
       setOpen(false);
       setApplicationId("");
       setScheduledAt("");
+      setInterviewers([]);
+      setMeetingLink("");
+      setLocation("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to schedule interview.");
     }
@@ -72,7 +102,7 @@ function ScheduleInterviewDialog() {
       <DialogTrigger asChild>
         <Button size="sm">Schedule interview</Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Schedule interview</DialogTitle>
         </DialogHeader>
@@ -109,7 +139,24 @@ function ScheduleInterviewDialog() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">When</Label>
+              <Label className="text-xs">Duration</Label>
+              <Select value={duration} onValueChange={setDuration}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[15, 30, 45, 60, 90, 120].map((m) => (
+                    <SelectItem key={m} value={String(m)}>
+                      {m < 60 ? `${m} min` : `${m / 60} hr${m > 60 ? "s" : ""}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Date &amp; time</Label>
               <Input
                 type="datetime-local"
                 value={scheduledAt}
@@ -117,7 +164,57 @@ function ScheduleInterviewDialog() {
                 required
               />
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Time zone</Label>
+              <Select value={timezone} onValueChange={setTimezone}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {INTERVIEW_TIMEZONES.map((z) => (
+                    <SelectItem key={z.value} value={z.value}>
+                      {z.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+          {preview && (
+            <p className="text-xs text-muted-foreground">
+              {formatInZone(preview, timezone)} · {formatInZone(preview, otherZone)}
+            </p>
+          )}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Interviewers</Label>
+            <InterviewerPicker value={interviewers} onChange={setInterviewers} />
+          </div>
+          {mode === "Onsite" ? (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Location</Label>
+              <Input
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="Office address, floor, room"
+                maxLength={500}
+                required
+              />
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label className="text-xs">
+                {mode === "Phone" ? "Dial-in / bridge link (optional)" : "Meeting link"}
+              </Label>
+              <Input
+                type="url"
+                value={meetingLink}
+                onChange={(e) => setMeetingLink(e.target.value)}
+                placeholder="https://teams.microsoft.com/…"
+                maxLength={1000}
+                required={mode === "Video"}
+              />
+            </div>
+          )}
           <DialogFooter>
             <Button type="submit" disabled={createInterview.isPending || !applicationId}>
               {createInterview.isPending ? "Scheduling…" : "Schedule"}
@@ -165,6 +262,7 @@ export function InterviewsClient() {
                 <th className="p-3 text-left">Job</th>
                 <th className="p-3 text-left">Round</th>
                 <th className="p-3 text-left">When</th>
+                <th className="p-3 text-left">Interviewers</th>
                 <th className="p-3 text-left">Mode</th>
                 <th className="p-3 text-left">Status</th>
                 <th className="p-3 text-left">Feedback</th>
@@ -173,14 +271,14 @@ export function InterviewsClient() {
             <tbody className="divide-y">
               {isLoading && (
                 <tr>
-                  <td colSpan={7} className="p-6 text-center text-sm text-muted-foreground">
+                  <td colSpan={8} className="p-6 text-center text-sm text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
               )}
               {!isLoading && (interviews?.length ?? 0) === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-6 text-center text-sm text-muted-foreground">
+                  <td colSpan={8} className="p-6 text-center text-sm text-muted-foreground">
                     No interviews scheduled yet.
                   </td>
                 </tr>
@@ -216,7 +314,25 @@ export function InterviewsClient() {
                         </Badge>
                       </Link>
                     </td>
-                    <td className="p-3 text-xs">{new Date(iv.scheduled_at).toLocaleString()}</td>
+                    <td className="p-3 text-xs">
+                      {iv.timezone ? (
+                        <>
+                          <div>{formatInZone(iv.scheduled_at, iv.timezone)}</div>
+                          {formatForViewer(iv.scheduled_at, iv.timezone) && (
+                            <div className="text-muted-foreground">
+                              {formatForViewer(iv.scheduled_at, iv.timezone)} (yours)
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        new Date(iv.scheduled_at).toLocaleString()
+                      )}
+                    </td>
+                    <td className="p-3 text-xs">
+                      {iv.panel_members.length
+                        ? iv.panel_members.map((m) => m.full_name ?? "Unknown").join(", ")
+                        : "—"}
+                    </td>
                     <td className="p-3 text-xs">
                       <span className="inline-flex items-center gap-1">
                         <Icon className="h-3 w-3" />

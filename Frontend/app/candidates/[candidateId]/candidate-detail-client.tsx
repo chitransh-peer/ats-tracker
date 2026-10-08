@@ -47,10 +47,13 @@ import {
   Sparkles,
   FileText,
   Download,
+  Eye,
   Loader2,
 } from "lucide-react";
+import { DocumentPreviewDialog } from "@/components/document-preview-dialog";
 import { initialsOf, relativeTime } from "@/lib/utils";
 import { CeipalTab } from "./ceipal-tab";
+import { EditCandidateDialog } from "./edit-candidate-dialog";
 
 /** Fill the merge tokens we can resolve from the current context. Anything we
  *  can't resolve is left visible so the recruiter notices before sending. */
@@ -262,6 +265,11 @@ export function CandidateDetailClient() {
   const { data: stageTemplate } = useStages();
   const addNote = useAddCandidateNote(candidateId);
   const [noteBody, setNoteBody] = useState("");
+  const { user, viewAsRole } = useAuth();
+  // Roles holding candidate:update; the API enforces the same.
+  const canEdit = (viewAsRole ? [viewAsRole] : (user?.roles ?? [])).some((r) =>
+    ["super_admin", "admin", "recruiter"].includes(r),
+  );
 
   if (isLoading) {
     return (
@@ -309,6 +317,7 @@ export function CandidateDetailClient() {
         { label: "Candidates", to: "/candidates" },
         { label: candidate.full_name },
       ]}
+      actions={canEdit ? <EditCandidateDialog candidate={candidate} /> : undefined}
     >
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
         <div className="space-y-6">
@@ -391,7 +400,7 @@ export function CandidateDetailClient() {
 
             {isCeipal && (
               <TabsContent value="ceipal" className="mt-4">
-                <CeipalTab candidateId={candidateId} />
+                <CeipalTab candidateId={candidateId} canEdit={canEdit} />
               </TabsContent>
             )}
 
@@ -672,6 +681,11 @@ function formatFileSize(bytes: number): string {
 
 function DocumentsTab({ candidateId }: { candidateId: string }) {
   const { data: documents, isLoading } = useCandidateDocuments(candidateId);
+  const { user } = useAuth();
+  // Everyone who can see the candidate can read their documents in the
+  // preview; taking a copy is a separate permission (admins by default).
+  const canDownload = Boolean(user?.can_download_documents);
+  const [previewing, setPreviewing] = useState<CandidateDocument | null>(null);
   // Tracked per document so two downloads at once each show their own spinner.
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -726,25 +740,40 @@ function DocumentsTab({ candidateId }: { candidateId: string }) {
                   {relativeTime(doc.created_at)}
                 </div>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleDownload(doc)}
-                disabled={downloadingId === doc.id}
-              >
-                {downloadingId === doc.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <>
-                    <Download className="h-4 w-4 mr-1" />
-                    Download
-                  </>
-                )}
+              <Button variant="outline" size="sm" onClick={() => setPreviewing(doc)}>
+                <Eye className="h-4 w-4 mr-1" />
+                Preview
               </Button>
+              {canDownload && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDownload(doc)}
+                  disabled={downloadingId === doc.id}
+                >
+                  {downloadingId === doc.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4 mr-1" />
+                      Download
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           ))}
         </CardContent>
       </Card>
+      {previewing && (
+        <DocumentPreviewDialog
+          open
+          onOpenChange={(open) => !open && setPreviewing(null)}
+          previewPath={`/candidates/${candidateId}/documents/${previewing.id}/preview`}
+          fileName={previewing.file_name}
+          onDownload={() => downloadCandidateDocument(candidateId, previewing)}
+        />
+      )}
     </div>
   );
 }

@@ -290,7 +290,7 @@ export function ReportsClient() {
                 </div>
               ) : (recruiters.data ?? []).length === 0 ? (
                 <p className="p-6 text-center text-sm text-muted-foreground">
-                  No recruiters own an active job yet.
+                  No active job has a primary recruiter or assignee yet.
                 </p>
               ) : (
                 <table className="w-full text-sm">

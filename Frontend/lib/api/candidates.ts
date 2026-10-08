@@ -60,7 +60,12 @@ export function createCandidate(input: CandidateCreateInput) {
 
 export function updateCandidate(
   candidateId: string,
-  input: Partial<CandidateCreateInput> & { status?: string; rating?: number },
+  // A blank string clears a field; null or absent leaves it as it is.
+  input: Partial<Omit<CandidateCreateInput, "email">> & {
+    email?: string | null;
+    status?: string;
+    rating?: number;
+  },
 ) {
   return apiClient.patch<Candidate>(`/candidates/${candidateId}`, input);
 }

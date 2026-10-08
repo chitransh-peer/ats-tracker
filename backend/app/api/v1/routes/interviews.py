@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db_session, require_permission
 from app.api.v1.routes._application_refs import with_application_refs
 from app.core.enums import AuditAction, PermissionAction, PermissionResource
+from app.core.exceptions import ForbiddenError
 from app.core.pagination import PageParams, page_params, paginate
 from app.schemas.auth import CurrentUser
 from app.schemas.interview import (
@@ -19,6 +20,7 @@ from app.schemas.interview import (
 )
 from app.services.audit.service import record as record_audit
 from app.services.interviews import service as interview_service
+from app.services.roles.service import roles_grant
 
 router = APIRouter(prefix="/interviews", tags=["interviews"])
 
@@ -102,9 +104,14 @@ def update_interview(
     db: Session = Depends(get_db_session),
 ) -> InterviewRead:
     interview = interview_service.get_interview(db, current_user.organization_id, interview_id, viewer=current_user)
-    interview = interview_service.update_interview(
-        db, interview, actor_id=current_user.id, **payload.model_dump(exclude_unset=True)
-    )
+    fields = payload.model_dump(exclude_unset=True)
+    # Interviewers may update a round they sit on (status, feedback) but not
+    # choose who else sits on it; that stays with whoever can schedule.
+    if "panel_user_ids" in fields and not roles_grant(
+        db, current_user.roles, PermissionResource.INTERVIEW, PermissionAction.CREATE
+    ):
+        raise ForbiddenError()
+    interview = interview_service.update_interview(db, interview, actor_id=current_user.id, **fields)
     record_audit(
         db,
         organization_id=current_user.organization_id,

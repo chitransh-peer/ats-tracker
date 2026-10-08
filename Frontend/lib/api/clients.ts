@@ -178,13 +178,7 @@ export const PRACTICES = [
   "Light Industrial",
 ] as const;
 
-export const COUNTRIES = [
-  "United States",
-  "Canada",
-  "India",
-  "United Kingdom",
-  "Australia",
-] as const;
+export { COUNTRIES } from "@/lib/geo";
 
 export const CLIENT_FACILITY_OPTIONS = [
   "Onsite",

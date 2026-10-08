@@ -110,6 +110,9 @@ class CeipalProfile(TimestampMixin, Base):
     # Applicants.Id in Ceipal.
     ceipal_id: Mapped[str] = mapped_column(String(100), nullable=False)
     fields: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    # Ceipal headers a recruiter has corrected here. A later backup's copy of
+    # these columns does not overwrite the correction.
+    edited_columns: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
     # [{submission_id, job_code, job_id, status, submitted_by, submitted_on, ...}]
     submissions: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
     resume_document_id: Mapped[uuid.UUID | None] = mapped_column(

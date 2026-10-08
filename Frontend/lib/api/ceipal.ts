@@ -81,8 +81,17 @@ export interface CeipalProfile {
   ceipal_id: string;
   columns: string[];
   values: Record<string, string>;
+  /** Columns corrected in this app since the import; kept on re-import. */
+  edited_columns: string[];
+  /** Identity and audit columns, shown but never editable. */
+  read_only_columns: string[];
   submissions: CeipalSubmission[];
   resume: CeipalResumeRef | null;
+}
+
+/** Correct a migrated Ceipal record: Ceipal header -> new value. */
+export function updateCeipalProfile(candidateId: string, values: Record<string, string>) {
+  return apiClient.patch<CeipalProfile>(`/ceipal/candidates/${candidateId}`, { values });
 }
 
 export function createCeipalImport(name: string) {

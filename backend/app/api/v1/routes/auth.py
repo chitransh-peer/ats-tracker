@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db_session
+from app.api.v1.routes._documents import can_download_documents
 from app.core.client_ip import client_ip
 from app.core.config import get_settings
 from app.core.enums import AuditAction, RoleName
@@ -159,4 +160,5 @@ def me(current_user: CurrentUser = Depends(get_current_user), db: Session = Depe
         roles=role_names_for_user(user),
         created_at=user.created_at,
         updated_at=user.updated_at,
+        can_download_documents=can_download_documents(db, current_user),
     )

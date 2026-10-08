@@ -23,6 +23,12 @@ class Interview(TimestampMixin, AuditedByMixin, Base):
     mode: Mapped[str] = mapped_column(String(20), nullable=False)
     scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=InterviewStatus.SCHEDULED.value)
+    # IANA zone the interview was scheduled in, so US and India teams read the
+    # same slot in the time zone it was agreed in, not only their own.
+    timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    meeting_link: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    location: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     application: Mapped["Application"] = relationship()
     panel_members: Mapped[list["InterviewPanelMember"]] = relationship(
@@ -46,6 +52,11 @@ class InterviewPanelMember(Base):
     is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     interview: Mapped["Interview"] = relationship(back_populates="panel_members")
+    user: Mapped["User"] = relationship(lazy="joined")
+
+    @property
+    def full_name(self) -> str | None:
+        return self.user.full_name if self.user else None
 
 
 class InterviewFeedback(TimestampMixin, Base):

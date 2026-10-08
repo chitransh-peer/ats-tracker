@@ -28,11 +28,20 @@ import {
 import { useApplication } from "@/lib/hooks/use-applications";
 import { useCandidate } from "@/lib/hooks/use-candidates";
 import { useJob } from "@/lib/hooks/use-jobs";
-import { useUsers } from "@/lib/hooks/use-users";
 import { useAuth } from "@/lib/auth/auth-context";
+import { useUserOptions } from "@/lib/hooks/use-users";
 import { ApiError } from "@/lib/api/client";
 import { formatDateTime, initialsOf, relativeTime } from "@/lib/utils";
-import { Video, MapPin, Phone, Star } from "lucide-react";
+import { ExternalLink, Video, MapPin, Phone, Star } from "lucide-react";
+import { InterviewerPicker } from "@/components/interviewer-picker";
+import {
+  INTERVIEW_TIMEZONES,
+  defaultTimezone,
+  formatForViewer,
+  formatInZone,
+  timezoneLabel,
+  zonedToUtcIso,
+} from "@/lib/timezones";
 
 const RECOMMENDATIONS = ["Strong Yes", "Yes", "No", "Strong No"] as const;
 const STATUSES = ["Scheduled", "Completed", "Cancelled", "Rescheduled"] as const;
@@ -143,17 +152,26 @@ function FeedbackForm({
 export function InterviewDetailClient() {
   const params = useParams<{ interviewId: string }>();
   const interviewId = params.interviewId;
-  const { user } = useAuth();
+  const { user, viewAsRole } = useAuth();
+  // Who can schedule (interview:create) may also change the panel.
+  const canSchedule = (viewAsRole ? [viewAsRole] : (user?.roles ?? [])).some((r) =>
+    ["super_admin", "admin", "recruiter"].includes(r),
+  );
 
   const { data: interview, isLoading } = useInterview(interviewId);
   const { data: consolidated } = useConsolidatedFeedback(interviewId);
   const { data: application } = useApplication(interview?.application_id);
   const { data: candidate } = useCandidate(application?.candidate_id);
   const { data: job } = useJob(application?.job_id);
-  const { data: users } = useUsers();
   const updateInterview = useUpdateInterview(interviewId);
+  // Readable by those who can read jobs; interviewers fall back to panel names.
+  const { data: userOptions } = useUserOptions();
 
   const [rescheduleAt, setRescheduleAt] = useState("");
+  const [rescheduleZone, setRescheduleZone] = useState<string | null>(null);
+  // null until the scheduler starts editing the panel or where it happens.
+  const [panelDraft, setPanelDraft] = useState<string[] | null>(null);
+  const [placeDraft, setPlaceDraft] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   if (isLoading) {
@@ -177,8 +195,19 @@ export function InterviewDetailClient() {
     );
   }
 
-  const userById = new Map((users ?? []).map((u) => [u.id, u]));
+  // Feedback comes from the panel, whose names the interview carries.
+  const nameById = new Map<string, string>(
+    (userOptions ?? []).map((u) => [u.id, u.full_name] as [string, string]),
+  );
+  for (const m of interview.panel_members) if (m.full_name) nameById.set(m.user_id, m.full_name);
   const ModeIcon = modeIcon[interview.mode] ?? Video;
+  const zone = rescheduleZone ?? interview.timezone ?? defaultTimezone();
+  const onsite = interview.mode === "Onsite";
+  const place = onsite ? interview.location : interview.meeting_link;
+  // The panel in lead-first order, as the picker expects it.
+  const panelIds = [...interview.panel_members]
+    .sort((a, b) => Number(b.is_primary) - Number(a.is_primary))
+    .map((m) => m.user_id);
   const myFeedback = interview.feedback_entries.some((f) => f.submitted_by === user?.id);
 
   async function handleStatusChange(status: string) {
@@ -195,12 +224,38 @@ export function InterviewDetailClient() {
     setActionError(null);
     try {
       await updateInterview.mutateAsync({
-        scheduled_at: new Date(rescheduleAt).toISOString(),
+        scheduled_at: zonedToUtcIso(rescheduleAt, zone),
+        timezone: zone,
         status: "Rescheduled",
       });
       setRescheduleAt("");
+      setRescheduleZone(null);
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : "Failed to reschedule.");
+    }
+  }
+
+  async function handleSaveDetails() {
+    setActionError(null);
+    if (panelDraft !== null && panelDraft.length === 0) {
+      setActionError("Keep at least one interviewer on the panel.");
+      return;
+    }
+    try {
+      await updateInterview.mutateAsync({
+        ...(panelDraft !== null && {
+          panel_user_ids: panelDraft,
+          primary_interviewer_id: panelDraft[0],
+        }),
+        ...(placeDraft !== null &&
+          (onsite
+            ? { location: placeDraft.trim() || null }
+            : { meeting_link: placeDraft.trim() || null })),
+      });
+      setPanelDraft(null);
+      setPlaceDraft(null);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "Failed to update the interview.");
     }
   }
 
@@ -239,8 +294,18 @@ export function InterviewDetailClient() {
               <div className="rounded-md border p-3">
                 <div className="text-xs text-muted-foreground">Scheduled for</div>
                 <div className="mt-0.5 text-sm font-medium">
-                  {formatDateTime(interview.scheduled_at)}
+                  {interview.timezone
+                    ? formatInZone(interview.scheduled_at, interview.timezone)
+                    : formatDateTime(interview.scheduled_at)}
+                  {interview.duration_minutes ? ` · ${interview.duration_minutes} min` : ""}
                 </div>
+                {interview.timezone && (
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {timezoneLabel(interview.timezone)}
+                    {formatForViewer(interview.scheduled_at, interview.timezone) &&
+                      ` · ${formatForViewer(interview.scheduled_at, interview.timezone)} your time`}
+                  </div>
+                )}
               </div>
               <div className="rounded-md border p-3">
                 <div className="text-xs text-muted-foreground">Mode</div>
@@ -248,6 +313,19 @@ export function InterviewDetailClient() {
                   <ModeIcon className="h-4 w-4" />
                   {interviewModeLabel(interview.mode)}
                 </div>
+                {place &&
+                  (onsite ? (
+                    <div className="mt-0.5 text-xs text-muted-foreground break-words">{place}</div>
+                  ) : (
+                    <a
+                      href={place}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-0.5 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      Join meeting <ExternalLink className="h-3 w-3" />
+                    </a>
+                  ))}
               </div>
               <div className="rounded-md border p-3">
                 <div className="text-xs text-muted-foreground">Status</div>
@@ -301,16 +379,14 @@ export function InterviewDetailClient() {
                         <Avatar className="h-7 w-7">
                           <AvatarFallback className="text-[10px]">
                             {initialsOf(
-                              f.submitted_by
-                                ? (userById.get(f.submitted_by)?.full_name ?? "?")
-                                : "?",
+                              f.submitted_by ? (nameById.get(f.submitted_by) ?? "?") : "?",
                             )}
                           </AvatarFallback>
                         </Avatar>
                         <div>
                           <div className="text-sm font-medium">
                             {f.submitted_by
-                              ? (userById.get(f.submitted_by)?.full_name ?? "Unknown")
+                              ? (nameById.get(f.submitted_by) ?? "Unknown")
                               : "Unknown"}
                           </div>
                           <div className="text-[11px] text-muted-foreground">
@@ -422,14 +498,13 @@ export function InterviewDetailClient() {
                 <p className="text-sm text-muted-foreground">No panel assigned.</p>
               ) : (
                 interview.panel_members.map((m) => {
-                  const panelist = userById.get(m.user_id);
                   const submitted = interview.feedback_entries.some(
                     (f) => f.submitted_by === m.user_id,
                   );
                   return (
                     <div key={m.user_id} className="flex items-center justify-between gap-2">
                       <div className="min-w-0 text-sm">
-                        <span className="truncate">{panelist?.full_name ?? "Unknown"}</span>
+                        <span className="truncate">{m.full_name ?? "Unknown"}</span>
                         {m.is_primary && (
                           <Badge variant="outline" className="ml-1.5 text-[10px]">
                             Lead
@@ -449,6 +524,37 @@ export function InterviewDetailClient() {
             </CardContent>
           </Card>
 
+          {canSchedule && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">
+                  Panel &amp; {onsite ? "location" : "meeting link"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <InterviewerPicker value={panelDraft ?? panelIds} onChange={setPanelDraft} />
+                <Input
+                  type={onsite ? "text" : "url"}
+                  value={placeDraft ?? place ?? ""}
+                  onChange={(e) => setPlaceDraft(e.target.value)}
+                  placeholder={onsite ? "Office address, floor, room" : "https://…"}
+                  maxLength={onsite ? 500 : 1000}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                  disabled={
+                    (panelDraft === null && placeDraft === null) || updateInterview.isPending
+                  }
+                  onClick={handleSaveDetails}
+                >
+                  Save changes
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Reschedule</CardTitle>
@@ -459,6 +565,18 @@ export function InterviewDetailClient() {
                 value={rescheduleAt}
                 onChange={(e) => setRescheduleAt(e.target.value)}
               />
+              <Select value={zone} onValueChange={setRescheduleZone}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {INTERVIEW_TIMEZONES.map((z) => (
+                    <SelectItem key={z.value} value={z.value}>
+                      {z.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button
                 size="sm"
                 variant="outline"

@@ -20,8 +20,12 @@ _ADMIN_RESTRICTED: set[Permission] = {
     if r != PermissionResource.ORGANIZATION or a != PermissionAction.DELETE
 }
 
+# Read-only means viewing in the app: executives preview documents but, like
+# recruiters, do not download the originals unless an admin grants it.
 _EXECUTIVE_READ_ONLY: set[Permission] = {
-    (r, PermissionAction.READ) for r in _ALL_RESOURCES if r not in {PermissionResource.SETTINGS}
+    (r, PermissionAction.READ)
+    for r in _ALL_RESOURCES
+    if r not in {PermissionResource.SETTINGS, PermissionResource.DOCUMENT_DOWNLOAD}
 }
 
 _RECRUITER_OPERATIONAL: set[Permission] = {

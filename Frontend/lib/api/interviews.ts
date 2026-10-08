@@ -42,20 +42,34 @@ export function getInterviewSummary() {
   return apiClient.get<InterviewSummary>("/interviews/summary");
 }
 
-export function createInterview(input: {
-  application_id: string;
-  round_name: string;
-  mode: string;
-  scheduled_at: string;
-  panel_user_ids?: string[];
-  primary_interviewer_id?: string;
-}) {
+export interface InterviewLogistics {
+  timezone?: string | null;
+  duration_minutes?: number | null;
+  meeting_link?: string | null;
+  location?: string | null;
+}
+
+export function createInterview(
+  input: {
+    application_id: string;
+    round_name: string;
+    mode: string;
+    scheduled_at: string;
+    panel_user_ids?: string[];
+    primary_interviewer_id?: string;
+  } & InterviewLogistics,
+) {
   return apiClient.post<Interview>("/interviews", input);
 }
 
 export function updateInterview(
   interviewId: string,
-  input: { status?: string; scheduled_at?: string },
+  input: {
+    status?: string;
+    scheduled_at?: string;
+    panel_user_ids?: string[];
+    primary_interviewer_id?: string | null;
+  } & InterviewLogistics,
 ) {
   return apiClient.patch<Interview>(`/interviews/${interviewId}`, input);
 }

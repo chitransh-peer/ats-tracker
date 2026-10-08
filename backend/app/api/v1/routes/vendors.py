@@ -5,7 +5,12 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session, require_permission
-from app.api.v1.routes._documents import document_response
+from app.api.v1.routes._documents import (
+    DocumentPreviewRead,
+    document_response,
+    ensure_can_download,
+    preview_response,
+)
 from app.core.enums import PermissionAction, PermissionResource
 from app.core.pagination import PageParams, page_params, paginate
 from app.schemas.auth import CurrentUser
@@ -299,7 +304,26 @@ def download_vendor_document(
 ) -> Response:
     vendor = vendor_service.get_vendor(db, current_user.organization_id, vendor_id)
     document = vendor_service.get_document(db, vendor, document_id)
+    ensure_can_download(db, current_user)
     return document_response(
+        storage_key=document.storage_key,
+        file_name=document.file_name,
+        content_type=document.content_type,
+    )
+
+
+@router.get("/{vendor_id}/documents/{document_id}/preview", response_model=DocumentPreviewRead)
+def preview_vendor_document(
+    vendor_id: uuid.UUID,
+    document_id: uuid.UUID,
+    current_user: CurrentUser = Depends(_READ),
+    db: Session = Depends(get_db_session),
+) -> DocumentPreviewRead:
+    vendor = vendor_service.get_vendor(db, current_user.organization_id, vendor_id)
+    document = vendor_service.get_document(db, vendor, document_id)
+    return preview_response(
+        db,
+        current_user,
         storage_key=document.storage_key,
         file_name=document.file_name,
         content_type=document.content_type,

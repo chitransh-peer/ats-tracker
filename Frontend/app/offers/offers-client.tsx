@@ -32,6 +32,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ApiError } from "@/lib/api/client";
+import {
+  OFFER_CURRENCIES,
+  OFFER_EMPLOYMENT_TYPES,
+  OFFER_PAY_TYPES,
+  OFFER_TAX_TERMS,
+  formatOfferPay,
+} from "@/lib/api/offers";
 
 const tone: Record<string, string> = {
   Draft: "bg-slate-100 text-slate-700",
@@ -42,33 +49,97 @@ const tone: Record<string, string> = {
   Expired: "bg-slate-200 text-slate-600",
 };
 
+const NONE = "__none__";
+
+/** A select whose empty value reads as "Not set". */
+function OptionalSelect({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly string[];
+}) {
+  return (
+    <Select value={value || NONE} onValueChange={(v) => onChange(v === NONE ? "" : v)}>
+      <SelectTrigger>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={NONE}>Not set</SelectItem>
+        {options.map((o) => (
+          <SelectItem key={o} value={o}>
+            {o}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+const EMPTY_FORM = {
+  applicationId: "",
+  payType: "Salary",
+  currency: "USD",
+  baseSalary: "",
+  hourlyRate: "",
+  employmentType: "Full-time",
+  taxTerm: "W-2",
+  contractDuration: "",
+  bonus: "",
+  equity: "",
+  joiningDate: "",
+};
+
 function NewOfferDialog() {
   const [open, setOpen] = useState(false);
-  const [applicationId, setApplicationId] = useState("");
-  const [baseSalary, setBaseSalary] = useState("");
-  const [bonus, setBonus] = useState("");
-  const [equity, setEquity] = useState("");
-  const [joiningDate, setJoiningDate] = useState("");
+  const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
   const createOffer = useCreateOffer();
+
+  const set = (key: keyof typeof EMPTY_FORM, value: string) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
+
+  // Picking the engagement fills in what usually goes with it; each field can
+  // still be changed afterwards.
+  function changeTaxTerm(taxTerm: string) {
+    setForm((prev) => {
+      const next = { ...prev, taxTerm };
+      if (taxTerm === "C2C" || taxTerm === "1099") {
+        next.payType = "Hourly";
+        if (prev.employmentType === "Full-time") next.employmentType = "Contract";
+      }
+      if (taxTerm === "India Payroll" || taxTerm === "India Contract") next.currency = "INR";
+      if (taxTerm === "India Contract" && prev.employmentType === "Full-time") {
+        next.employmentType = "Contract";
+      }
+      return next;
+    });
+  }
+
+  const hourly = form.payType === "Hourly";
+  const isContract = form.employmentType.startsWith("Contract");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     try {
       await createOffer.mutateAsync({
-        application_id: applicationId,
-        base_salary: Number(baseSalary),
-        bonus: bonus ? Number(bonus) : null,
-        equity: equity || null,
-        joining_date: joiningDate || null,
+        application_id: form.applicationId,
+        pay_type: form.payType,
+        currency: form.currency,
+        base_salary: hourly ? null : Number(form.baseSalary),
+        hourly_rate: hourly ? Number(form.hourlyRate) : null,
+        employment_type: form.employmentType || null,
+        tax_term: form.taxTerm || null,
+        contract_duration: isContract ? form.contractDuration.trim() || null : null,
+        bonus: !hourly && form.bonus ? Number(form.bonus) : null,
+        equity: (!hourly && form.equity) || null,
+        joining_date: form.joiningDate || null,
       });
       setOpen(false);
-      setApplicationId("");
-      setBaseSalary("");
-      setBonus("");
-      setEquity("");
-      setJoiningDate("");
+      setForm(EMPTY_FORM);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create offer.");
     }
@@ -79,7 +150,7 @@ function NewOfferDialog() {
       <DialogTrigger asChild>
         <Button size="sm">New offer</Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>New offer</DialogTitle>
         </DialogHeader>
@@ -90,46 +161,131 @@ function NewOfferDialog() {
             <EntityPicker
               kind="applications"
               status="Active"
-              value={applicationId || null}
-              onChange={(id) => setApplicationId(id ?? "")}
+              value={form.applicationId || null}
+              onChange={(id) => set("applicationId", id ?? "")}
               placeholder="Search candidate or job"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Base salary (USD)</Label>
-              <Input
-                type="number"
-                value={baseSalary}
-                onChange={(e) => setBaseSalary(e.target.value)}
-                required
+              <Label className="text-xs">Employment terms</Label>
+              <OptionalSelect
+                value={form.taxTerm}
+                onChange={changeTaxTerm}
+                options={OFFER_TAX_TERMS}
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Bonus (USD)</Label>
-              <Input type="number" value={bonus} onChange={(e) => setBonus(e.target.value)} />
+              <Label className="text-xs">Employment type</Label>
+              <OptionalSelect
+                value={form.employmentType}
+                onChange={(v) => set("employmentType", v)}
+                options={OFFER_EMPLOYMENT_TYPES}
+              />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Equity</Label>
+              <Label className="text-xs">Pay type</Label>
+              <Select value={form.payType} onValueChange={(v) => set("payType", v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {OFFER_PAY_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t === "Salary" ? "Annual salary" : "Hourly rate"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Currency</Label>
+              <Select value={form.currency} onValueChange={(v) => set("currency", v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {OFFER_CURRENCIES.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {hourly ? (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Hourly rate ({form.currency})</Label>
               <Input
-                value={equity}
-                onChange={(e) => setEquity(e.target.value)}
-                placeholder="e.g. 1000 RSUs / 4yr"
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={form.hourlyRate}
+                onChange={(e) => set("hourlyRate", e.target.value)}
+                required
               />
             </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">
+                    {form.currency === "INR" ? "Annual CTC" : "Base salary"} ({form.currency})
+                  </Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={form.baseSalary}
+                    onChange={(e) => set("baseSalary", e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Bonus ({form.currency})</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={form.bonus}
+                    onChange={(e) => set("bonus", e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Equity</Label>
+                <Input
+                  value={form.equity}
+                  onChange={(e) => set("equity", e.target.value)}
+                  placeholder="e.g. 1000 RSUs / 4yr"
+                />
+              </div>
+            </>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            {isContract && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Contract duration</Label>
+                <Input
+                  value={form.contractDuration}
+                  onChange={(e) => set("contractDuration", e.target.value)}
+                  placeholder="e.g. 6 months"
+                  maxLength={100}
+                />
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label className="text-xs">Joining date</Label>
               <Input
                 type="date"
-                value={joiningDate}
-                onChange={(e) => setJoiningDate(e.target.value)}
+                value={form.joiningDate}
+                onChange={(e) => set("joiningDate", e.target.value)}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={createOffer.isPending || !applicationId}>
+            <Button type="submit" disabled={createOffer.isPending || !form.applicationId}>
               {createOffer.isPending ? "Creating…" : "Create offer"}
             </Button>
           </DialogFooter>
@@ -173,8 +329,8 @@ export function OffersClient() {
               <tr>
                 <th className="p-3 text-left">Candidate</th>
                 <th className="p-3 text-left">Job</th>
-                <th className="p-3 text-right">Base</th>
-                <th className="p-3 text-left">Equity</th>
+                <th className="p-3 text-right">Pay</th>
+                <th className="p-3 text-left">Terms</th>
                 <th className="p-3 text-left">Joining</th>
                 <th className="p-3 text-left">Status</th>
                 <th className="p-3 text-right">Actions</th>
@@ -211,10 +367,14 @@ export function OffersClient() {
                       )}
                     </td>
                     <td className="p-3 text-xs">{o.job_title ?? "—"}</td>
-                    <td className="p-3 text-right font-medium">
-                      ${o.base_salary.toLocaleString()}
+                    <td className="p-3 text-right font-medium whitespace-nowrap">
+                      {formatOfferPay(o)}
                     </td>
-                    <td className="p-3 text-xs">{o.equity ?? "—"}</td>
+                    <td className="p-3 text-xs">
+                      {[o.tax_term, o.employment_type, o.contract_duration]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
+                    </td>
                     <td className="p-3 text-xs">{o.joining_date ?? "—"}</td>
                     <td className="p-3">
                       <Badge className={`text-[10px] ${tone[o.status] ?? ""}`}>{o.status}</Badge>

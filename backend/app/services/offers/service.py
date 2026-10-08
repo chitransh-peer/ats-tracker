@@ -1,10 +1,18 @@
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import Select, false, func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.enums import OfferApprovalStatus, OfferStatus, RoleName
+from app.core.enums import (
+    OfferApprovalStatus,
+    OfferCurrency,
+    OfferEmploymentType,
+    OfferPayType,
+    OfferStatus,
+    OfferTaxTerm,
+    RoleName,
+)
 from app.core.exceptions import NotFoundError, ValidationAppError
 from app.core.scoping import scoped_roles
 from app.db.models.application import Application
@@ -35,16 +43,62 @@ def _load(query):
     return query.options(selectinload(Offer.versions), selectinload(Offer.approvals))
 
 
+# The compensation terms an offer carries, and each version snapshots.
+_TERMS = (
+    "pay_type",
+    "base_salary",
+    "hourly_rate",
+    "currency",
+    "employment_type",
+    "tax_term",
+    "contract_duration",
+    "bonus",
+    "equity",
+    "joining_date",
+)
+
+
+def _one_of(label: str, value: str | None, choices: type) -> None:
+    allowed = [c.value for c in choices]
+    if value is not None and value not in allowed:
+        raise ValidationAppError(f"{label} must be one of: {', '.join(allowed)}")
+
+
+def _normalize_terms(offer: Offer) -> None:
+    """Checks the terms hang together: a salaried offer needs a base salary and
+    an hourly one an hourly rate, and the pay field the type does not use is
+    cleared so a switch from salary to hourly leaves no stale figure behind."""
+    _one_of("Pay type", offer.pay_type, OfferPayType)
+    _one_of("Currency", offer.currency, OfferCurrency)
+    _one_of("Employment type", offer.employment_type, OfferEmploymentType)
+    _one_of("Employment terms", offer.tax_term, OfferTaxTerm)
+    if offer.pay_type == OfferPayType.HOURLY.value:
+        if offer.hourly_rate is None:
+            raise ValidationAppError("An hourly offer needs an hourly rate")
+        offer.base_salary = None
+    else:
+        if offer.base_salary is None:
+            raise ValidationAppError("A salaried offer needs a base salary")
+        offer.hourly_rate = None
+
+
+def _snapshot(offer: Offer, version_number: int, actor_id: uuid.UUID | None) -> OfferVersion:
+    return OfferVersion(
+        offer_id=offer.id,
+        version_number=version_number,
+        created_by=actor_id,
+        created_at=datetime.now(UTC),
+        **{term: getattr(offer, term) for term in _TERMS},
+    )
+
+
 def create_offer(
     db: Session,
     *,
     organization_id: uuid.UUID,
     actor_id: uuid.UUID | None,
     application_id: uuid.UUID,
-    base_salary: int,
-    bonus: int | None,
-    equity: str | None,
-    joining_date: date | None,
+    **terms,
 ) -> Offer:
     application = db.get(Application, application_id)
     if application is None or application.organization_id != organization_id:
@@ -54,27 +108,16 @@ def create_offer(
         organization_id=organization_id,
         application_id=application_id,
         status=OfferStatus.DRAFT.value,
-        base_salary=base_salary,
-        bonus=bonus,
-        equity=equity,
-        joining_date=joining_date,
         created_by=actor_id,
         updated_by=actor_id,
+        **{term: terms.get(term) for term in _TERMS if term in terms},
     )
+    offer.pay_type = offer.pay_type or OfferPayType.SALARY.value
+    offer.currency = offer.currency or OfferCurrency.USD.value
+    _normalize_terms(offer)
     db.add(offer)
     db.flush()
-    db.add(
-        OfferVersion(
-            offer_id=offer.id,
-            version_number=1,
-            base_salary=base_salary,
-            bonus=bonus,
-            equity=equity,
-            joining_date=joining_date,
-            created_by=actor_id,
-            created_at=datetime.now(UTC),
-        )
-    )
+    db.add(_snapshot(offer, 1, actor_id))
     db.commit()
     db.refresh(offer)
     return offer
@@ -125,24 +168,15 @@ def update_offer(db: Session, offer: Offer, *, actor_id: uuid.UUID | None, **fie
         raise ValidationAppError("Only draft offers can be edited")
 
     for key, value in fields.items():
-        if value is not None:
+        # pay_type and currency always have a value; the rest may be cleared.
+        if value is not None or key not in ("pay_type", "currency"):
             setattr(offer, key, value)
+    _normalize_terms(offer)
     offer.updated_by = actor_id
     db.flush()
 
     next_version = (max((v.version_number for v in offer.versions), default=0)) + 1
-    db.add(
-        OfferVersion(
-            offer_id=offer.id,
-            version_number=next_version,
-            base_salary=offer.base_salary,
-            bonus=offer.bonus,
-            equity=offer.equity,
-            joining_date=offer.joining_date,
-            created_by=actor_id,
-            created_at=datetime.now(UTC),
-        )
-    )
+    db.add(_snapshot(offer, next_version, actor_id))
     db.commit()
     db.refresh(offer)
     return offer

@@ -35,9 +35,16 @@ import {
   RESPOND_BY_OPTIONS,
   TAX_TERM_OPTIONS,
   TURNAROUND_UNITS,
-  WORK_AUTHORIZATIONS,
 } from "@/lib/api/jobs";
-import { COUNTRIES } from "@/lib/api/clients";
+import {
+  COUNTRIES,
+  DEFAULT_COUNTRY,
+  currencyFor,
+  regionLabelFor,
+  regionsFor,
+  withSaved,
+  workAuthorizationsFor,
+} from "@/lib/geo";
 import { ApiError } from "@/lib/api/client";
 import { NumberInput } from "@/components/number-input";
 import type { Job, JobCreateInput } from "@/lib/api/types";
@@ -166,7 +173,7 @@ function initialState(job?: Job): FormState {
     address: job?.address ?? "",
     city: job?.city ?? "",
     states: job?.states ?? [],
-    country: job?.country ?? "United States",
+    country: job?.country ?? DEFAULT_COUNTRY,
     postal_code: job?.postal_code ?? "",
 
     education: job?.education ?? "",
@@ -336,59 +343,6 @@ function ChipInput({
   );
 }
 
-const US_STATES = [
-  "Alabama",
-  "Alaska",
-  "Arizona",
-  "Arkansas",
-  "California",
-  "Colorado",
-  "Connecticut",
-  "Delaware",
-  "Florida",
-  "Georgia",
-  "Hawaii",
-  "Idaho",
-  "Illinois",
-  "Indiana",
-  "Iowa",
-  "Kansas",
-  "Kentucky",
-  "Louisiana",
-  "Maine",
-  "Maryland",
-  "Massachusetts",
-  "Michigan",
-  "Minnesota",
-  "Mississippi",
-  "Missouri",
-  "Montana",
-  "Nebraska",
-  "Nevada",
-  "New Hampshire",
-  "New Jersey",
-  "New Mexico",
-  "New York",
-  "North Carolina",
-  "North Dakota",
-  "Ohio",
-  "Oklahoma",
-  "Oregon",
-  "Pennsylvania",
-  "Rhode Island",
-  "South Carolina",
-  "South Dakota",
-  "Tennessee",
-  "Texas",
-  "Utah",
-  "Vermont",
-  "Virginia",
-  "Washington",
-  "West Virginia",
-  "Wisconsin",
-  "Wyoming",
-] as const;
-
 export function JobForm({ job }: { job?: Job }) {
   const router = useRouter();
   const isEdit = Boolean(job);
@@ -408,6 +362,28 @@ export function JobForm({ job }: { job?: Job }) {
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  // States and work authorizations belong to a country, so switching country
+  // drops the ones that don't apply there, and a rate still in the old
+  // country's currency moves to the new one's.
+  function changeCountry(country: string) {
+    setForm((prev) => {
+      const regions = regionsFor(country);
+      const auths = workAuthorizationsFor(country);
+      const oldCurrency = currencyFor(prev.country);
+      const newCurrency = currencyFor(country);
+      const swap = (c: string | undefined) => (c === oldCurrency ? newCurrency : c);
+      return {
+        ...prev,
+        country,
+        states: (prev.states ?? []).filter((s) => regions.includes(s)),
+        work_authorizations: (prev.work_authorizations ?? []).filter((w) => auths.includes(w)),
+        pay_rate_currency: swap(prev.pay_rate_currency),
+        client_bill_rate_currency: swap(prev.client_bill_rate_currency),
+      };
+    });
+    setStateQuery("");
   }
 
   function toggleIn(
@@ -709,10 +685,7 @@ export function JobForm({ job }: { job?: Job }) {
                 </RadioGroup>
               </Field>
               <Field label="Country">
-                <Select
-                  value={form.country ?? "United States"}
-                  onValueChange={(v) => set("country", v)}
-                >
+                <Select value={form.country ?? DEFAULT_COUNTRY} onValueChange={changeCountry}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -725,16 +698,16 @@ export function JobForm({ job }: { job?: Job }) {
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="States" required>
+              <Field label={regionLabelFor(form.country)} required>
                 <Input
                   className="mb-2 h-8"
-                  placeholder="Search states…"
+                  placeholder={`Search ${regionLabelFor(form.country).toLowerCase()}…`}
                   value={stateQuery}
                   onChange={(e) => setStateQuery(e.target.value)}
                 />
                 <div className="max-h-32 overflow-y-auto rounded-md border p-2">
                   <ChipMultiSelect
-                    options={US_STATES.filter((st) =>
+                    options={withSaved(regionsFor(form.country), form.states ?? []).filter((st) =>
                       st.toLowerCase().includes(stateQuery.trim().toLowerCase()),
                     )}
                     selected={form.states ?? []}
@@ -893,7 +866,10 @@ export function JobForm({ job }: { job?: Job }) {
               <Field label="Work Authorization" required>
                 <div className="rounded-md border p-2">
                   <ChipMultiSelect
-                    options={WORK_AUTHORIZATIONS}
+                    options={withSaved(
+                      workAuthorizationsFor(form.country),
+                      form.work_authorizations ?? [],
+                    )}
                     selected={form.work_authorizations ?? []}
                     onToggle={(o) => toggleIn("work_authorizations", o)}
                   />

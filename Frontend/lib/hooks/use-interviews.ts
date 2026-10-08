@@ -59,7 +59,7 @@ export function useConsolidatedFeedback(interviewId: string | undefined) {
 export function useUpdateInterview(interviewId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { status?: string; scheduled_at?: string }) =>
+    mutationFn: (input: Parameters<typeof interviewsApi.updateInterview>[1]) =>
       interviewsApi.updateInterview(interviewId, input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["interviews"] }),
   });
