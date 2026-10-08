@@ -32,6 +32,11 @@ const RESOURCES = [
   "audit_log",
   "client",
   "vendor",
+  "talent_bench",
+  "hotlist",
+  // "read" here means downloading original files; previewing them in the app
+  // only needs read on the record they belong to.
+  "document_download",
 ];
 const ACTIONS = ["create", "read", "update", "delete", "manage"];
 

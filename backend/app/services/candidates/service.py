@@ -4,7 +4,7 @@ from sqlalchemy import false, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.enums import CandidateStatus, DuplicateMatchReason, RoleName
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError, ValidationAppError
 from app.core.scoping import scoped_roles
 from app.db.models.application import Application
 from app.db.models.candidate import (
@@ -173,8 +173,15 @@ def list_candidates(
 
 def update_candidate(db: Session, candidate: Candidate, *, actor_id: uuid.UUID | None, **fields) -> Candidate:
     for key, value in fields.items():
-        if value is not None:
-            setattr(candidate, key, value)
+        if value is None:
+            continue
+        # An explicit blank clears the field, so a wrong value can be removed
+        # and not only replaced; the name is the one thing that cannot go.
+        if isinstance(value, str) and not value.strip():
+            if key == "full_name":
+                raise ValidationAppError("A candidate needs a name")
+            value = None
+        setattr(candidate, key, value)
     candidate.updated_by = actor_id
     db.commit()
     db.refresh(candidate)

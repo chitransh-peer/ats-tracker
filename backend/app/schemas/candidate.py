@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class EducationItem(BaseModel):
@@ -32,7 +32,9 @@ class CandidateCreate(BaseModel):
 
 
 class CandidateUpdate(BaseModel):
-    full_name: str | None = None
+    full_name: str | None = Field(default=None, min_length=1, max_length=255)
+    # Correctable, since migrated records can carry a wrong or missing address.
+    email: EmailStr | None = None
     phone: str | None = None
     location: str | None = None
     current_company: str | None = None

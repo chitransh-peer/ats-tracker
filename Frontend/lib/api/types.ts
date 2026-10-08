@@ -10,6 +10,24 @@ export interface CurrentUserProfile {
   roles: string[];
   created_at: string;
   updated_at: string;
+  /** Whether this user may download original files, or only preview them. */
+  can_download_documents?: boolean | null;
+}
+
+/** A read-only rendering of a stored document for the in-app viewer. */
+export interface DocumentPreview {
+  kind: "pages" | "text" | "unsupported";
+  file_name: string;
+  page_count: number;
+  truncated: boolean;
+  pages: { content_type: string; data_base64: string }[];
+  blocks: {
+    kind: "heading" | "paragraph" | "table";
+    text: string | null;
+    rows: string[][] | null;
+  }[];
+  message: string | null;
+  can_download: boolean;
 }
 
 export interface CandidateDocument {
@@ -423,6 +441,7 @@ export interface InterviewFeedbackEntry {
 
 export interface InterviewPanelMember {
   user_id: string;
+  full_name: string | null;
   is_primary: boolean;
 }
 
@@ -439,6 +458,11 @@ export interface Interview {
   mode: string;
   scheduled_at: string;
   status: string;
+  /** IANA zone the interview was scheduled in. */
+  timezone: string | null;
+  duration_minutes: number | null;
+  meeting_link: string | null;
+  location: string | null;
   panel_members: InterviewPanelMember[];
   feedback_entries: InterviewFeedbackEntry[];
   created_at: string;
@@ -461,7 +485,13 @@ export interface ConsolidatedFeedback {
 export interface OfferVersion {
   id: string;
   version_number: number;
-  base_salary: number;
+  pay_type: string;
+  base_salary: number | null;
+  hourly_rate: number | null;
+  currency: string;
+  employment_type: string | null;
+  tax_term: string | null;
+  contract_duration: string | null;
   bonus: number | null;
   equity: string | null;
   joining_date: string | null;
@@ -488,7 +518,13 @@ export interface Offer {
   job_id: string | null;
   job_title: string | null;
   status: string;
-  base_salary: number;
+  pay_type: string;
+  base_salary: number | null;
+  hourly_rate: number | null;
+  currency: string;
+  employment_type: string | null;
+  tax_term: string | null;
+  contract_duration: string | null;
   bonus: number | null;
   equity: string | null;
   joining_date: string | null;

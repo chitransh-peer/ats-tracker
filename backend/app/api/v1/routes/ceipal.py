@@ -123,6 +123,9 @@ class CeipalProfileRead(BaseModel):
     ceipal_id: str
     columns: list[str]
     values: dict[str, str]
+    # Columns corrected in this app since the import, and those never editable.
+    edited_columns: list[str] = []
+    read_only_columns: list[str] = []
     submissions: list[dict]
     resume: ResumeRef | None
 
@@ -372,15 +375,55 @@ def get_ceipal_profile(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.CANDIDATE, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> CeipalProfileRead:
+    return _profile_read(_profile_for(db, current_user, candidate_id))
+
+
+class CeipalProfileUpdate(BaseModel):
+    # Ceipal header -> corrected value.
+    values: dict[str, str] = Field(max_length=200)
+
+
+@router.patch("/ceipal/candidates/{candidate_id}", response_model=CeipalProfileRead)
+def update_ceipal_profile(
+    candidate_id: uuid.UUID,
+    payload: CeipalProfileUpdate,
+    current_user: CurrentUser = Depends(require_permission(PermissionResource.CANDIDATE, PermissionAction.UPDATE)),
+    db: Session = Depends(get_db_session),
+) -> CeipalProfileRead:
+    """Correct or complete a migrated Ceipal record. Résumé and document
+    downloads stay governed by the separate download permission."""
+    profile = _profile_for(db, current_user, candidate_id)
+    profile = ceipal_service.edit_profile(db, profile, actor_id=current_user.id, values=payload.values)
+    record_audit(
+        db,
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action=AuditAction.CANDIDATE_UPDATED.value,
+        resource_type="candidate",
+        resource_id=str(profile.candidate_id),
+        metadata={"ceipal_columns": sorted(payload.values)},
+    )
+    db.commit()
+    return _profile_read(profile)
+
+
+def _profile_for(db: Session, current_user: CurrentUser, candidate_id: uuid.UUID) -> CeipalProfile:
     candidate = candidate_service.get_candidate(db, current_user.organization_id, candidate_id, viewer=current_user)
     profile = db.scalar(select(CeipalProfile).where(CeipalProfile.candidate_id == candidate.id))
     if profile is None:
         raise NotFoundError("This candidate was not imported from Ceipal")
+    return profile
+
+
+def _profile_read(profile: CeipalProfile) -> CeipalProfileRead:
+    columns = ceipal_service.columns_for([profile])
     return CeipalProfileRead(
-        candidate_id=candidate.id,
+        candidate_id=profile.candidate_id,
         ceipal_id=profile.ceipal_id,
-        columns=ceipal_service.columns_for([profile]),
+        columns=columns,
         values={k: str(v) for k, v in (profile.fields or {}).items()},
+        edited_columns=list(profile.edited_columns or []),
+        read_only_columns=[c for c in columns if c.lower() in ceipal_service.READ_ONLY_COLUMNS],
         submissions=profile.submissions or [],
         resume=_resume(profile),
     )

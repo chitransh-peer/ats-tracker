@@ -564,3 +564,112 @@ def test_import_ids_are_scoped_to_the_organization(client, admin):
     user, headers = admin
     response = client.get(f"/api/v1/imports/ceipal/{uuid.uuid4()}", headers=headers)
     assert response.status_code == 404
+
+
+def _forrest_id(client, headers):
+    rows = client.get("/api/v1/ceipal/candidates?search=forrest", headers=headers).json()["rows"]
+    return rows[0]["candidate_id"]
+
+
+def test_a_recruiter_can_correct_a_ceipal_record(client, db, admin, make_job, make_user, auth_headers, storage):
+    _user, headers = admin
+    imp, _job = _backup(client, headers, make_job)
+    _run(client, headers, imp["id"])
+    candidate_id = _forrest_id(client, headers)
+
+    recruiter, password = make_user(role_names=[RoleName.RECRUITER.value])
+    recruiter_headers = auth_headers(recruiter.email, password)
+    response = client.patch(
+        f"/api/v1/ceipal/candidates/{candidate_id}",
+        json={"values": {"Mobile": "(512) 555-0100", "JOb Title": "Principal AEM Developer", "City": "Dallas"}},
+        headers=recruiter_headers,
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["values"]["Mobile"] == "(512) 555-0100"
+    assert set(body["edited_columns"]) == {"Mobile", "JOb Title", "City"}
+
+    # The candidate fields drawn from those columns follow the correction.
+    candidate = db.get(Candidate, uuid.UUID(candidate_id))
+    db.refresh(candidate)
+    assert candidate.phone == "(512) 555-0100"
+    assert candidate.current_title == "Principal AEM Developer"
+    assert candidate.location == "Dallas, Texas, United States"
+
+
+def test_a_correction_survives_reimporting_the_next_backup(client, db, admin, make_job, storage):
+    user, headers = admin
+    imp, _job = _backup(client, headers, make_job)
+    _run(client, headers, imp["id"])
+    candidate_id = _forrest_id(client, headers)
+
+    client.patch(
+        f"/api/v1/ceipal/candidates/{candidate_id}",
+        json={"values": {"Mobile": "(512) 555-0100"}},
+        headers=headers,
+    )
+    # And a fix made through the ordinary candidate edit.
+    client.patch(f"/api/v1/candidates/{candidate_id}", json={"current_company": "Acme Corp"}, headers=headers)
+
+    second = client.post("/api/v1/imports/ceipal", json={"name": "backup_09_2026"}, headers=headers).json()
+    _stage(
+        client,
+        headers,
+        second["id"],
+        "applicants",
+        [
+            _applicant(
+                "114453",
+                "114600",
+                "Forrest",
+                "Hardin",
+                "forresthardin@outlook.com",
+                **{"JOb Title": "Lead", "Current Company": "Ceipal Co"},
+            )
+        ],
+    )
+    _run(client, headers, second["id"])
+
+    candidate = db.get(Candidate, uuid.UUID(candidate_id))
+    db.refresh(candidate)
+    assert candidate.phone == "(512) 555-0100"  # corrected column kept
+    assert candidate.current_company == "Acme Corp"  # edited field kept
+    assert candidate.current_title == "Lead"  # untouched field still follows Ceipal
+    profile = client.get(f"/api/v1/ceipal/candidates/{candidate_id}", headers=headers).json()
+    assert profile["values"]["Mobile"] == "(512) 555-0100"
+    assert profile["values"]["JOb Title"] == "Lead"
+
+
+def test_only_ceipal_columns_can_be_edited(client, admin, make_job, storage):
+    _user, headers = admin
+    imp, _job = _backup(client, headers, make_job)
+    _run(client, headers, imp["id"])
+    candidate_id = _forrest_id(client, headers)
+
+    response = client.patch(
+        f"/api/v1/ceipal/candidates/{candidate_id}", json={"values": {"Not A Column": "x"}}, headers=headers
+    )
+    assert response.status_code == 422
+    identity = client.patch(f"/api/v1/ceipal/candidates/{candidate_id}", json={"values": {"Id": "1"}}, headers=headers)
+    assert identity.status_code == 422
+    blank_name = client.patch(
+        f"/api/v1/ceipal/candidates/{candidate_id}",
+        json={"values": {"First Name": "", "Last Name": "", "Nick Name": ""}},
+        headers=headers,
+    )
+    assert blank_name.status_code == 422
+
+
+def test_editing_a_ceipal_record_needs_candidate_update(client, admin, make_job, make_user, auth_headers, storage):
+    _user, headers = admin
+    imp, _job = _backup(client, headers, make_job)
+    _run(client, headers, imp["id"])
+    candidate_id = _forrest_id(client, headers)
+
+    executive, password = make_user(role_names=[RoleName.EXECUTIVE.value])
+    response = client.patch(
+        f"/api/v1/ceipal/candidates/{candidate_id}",
+        json={"values": {"Mobile": "1"}},
+        headers=auth_headers(executive.email, password),
+    )
+    assert response.status_code == 403

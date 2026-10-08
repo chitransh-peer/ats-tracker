@@ -6,7 +6,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session, require_permission
-from app.api.v1.routes._documents import document_response
+from app.api.v1.routes._documents import (
+    DocumentPreviewRead,
+    document_response,
+    ensure_can_download,
+    preview_response,
+)
 from app.core.enums import AuditAction, PermissionAction, PermissionResource
 from app.core.pagination import PageParams, page_params, paginate
 from app.schemas.application import ApplicationRead
@@ -333,9 +338,28 @@ def download_job_document(
     current_user: CurrentUser = Depends(require_permission(PermissionResource.JOB, PermissionAction.READ)),
     db: Session = Depends(get_db_session),
 ) -> Response:
-    job = job_service.get_job(db, current_user.organization_id, job_id)
+    job = job_service.get_job(db, current_user.organization_id, job_id, viewer=current_user)
     document = job_service.get_document(db, job, document_id)
+    ensure_can_download(db, current_user)
     return document_response(
+        storage_key=document.storage_key,
+        file_name=document.file_name,
+        content_type=document.content_type,
+    )
+
+
+@router.get("/{job_id}/documents/{document_id}/preview", response_model=DocumentPreviewRead)
+def preview_job_document(
+    job_id: uuid.UUID,
+    document_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_permission(PermissionResource.JOB, PermissionAction.READ)),
+    db: Session = Depends(get_db_session),
+) -> DocumentPreviewRead:
+    job = job_service.get_job(db, current_user.organization_id, job_id, viewer=current_user)
+    document = job_service.get_document(db, job, document_id)
+    return preview_response(
+        db,
+        current_user,
         storage_key=document.storage_key,
         file_name=document.file_name,
         content_type=document.content_type,

@@ -19,6 +19,7 @@ from app.api.v1.routes import (
     pipeline,
     reports,
     roles,
+    search,
     settings,
     templates,
     users,
@@ -44,6 +45,7 @@ api_router.include_router(offers.router)
 api_router.include_router(onboarding.router)
 api_router.include_router(templates.router)
 api_router.include_router(reports.router)
+api_router.include_router(search.router)
 api_router.include_router(audit.router)
 api_router.include_router(settings.router)
 api_router.include_router(ai.router)

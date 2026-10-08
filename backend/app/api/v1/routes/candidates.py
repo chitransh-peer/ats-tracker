@@ -4,7 +4,12 @@ from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session, require_permission
-from app.api.v1.routes._documents import document_response
+from app.api.v1.routes._documents import (
+    DocumentPreviewRead,
+    document_response,
+    ensure_can_download,
+    preview_response,
+)
 from app.core.enums import AuditAction, CandidateDocumentType, PermissionAction, PermissionResource
 from app.core.file_validation import validate_document_size, validate_resume_upload
 from app.core.pagination import PageParams, page_params, paginate
@@ -210,7 +215,27 @@ def download_document(
     # their resume either.
     candidate = candidate_service.get_candidate(db, current_user.organization_id, candidate_id, viewer=current_user)
     document = candidate_service.get_document(db, candidate, document_id)
+    ensure_can_download(db, current_user)
     return document_response(
+        storage_key=document.storage_key,
+        file_name=document.file_name,
+        content_type=document.content_type,
+    )
+
+
+@router.get("/{candidate_id}/documents/{document_id}/preview", response_model=DocumentPreviewRead)
+def preview_document(
+    candidate_id: uuid.UUID,
+    document_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_permission(PermissionResource.CANDIDATE, PermissionAction.READ)),
+    db: Session = Depends(get_db_session),
+) -> DocumentPreviewRead:
+    """Read a résumé or document in the app, without downloading it."""
+    candidate = candidate_service.get_candidate(db, current_user.organization_id, candidate_id, viewer=current_user)
+    document = candidate_service.get_document(db, candidate, document_id)
+    return preview_response(
+        db,
+        current_user,
         storage_key=document.storage_key,
         file_name=document.file_name,
         content_type=document.content_type,

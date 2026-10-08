@@ -22,6 +22,9 @@ class UserRead(BaseModel):
     roles: list[str]
     created_at: datetime
     updated_at: datetime
+    # Set on /auth/me only: whether this user may download original document
+    # files, or only preview them in the app.
+    can_download_documents: bool | None = None
 
     model_config = {"from_attributes": True}
 

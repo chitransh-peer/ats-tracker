@@ -2,7 +2,7 @@ import secrets
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Select, false, func, or_, select
+from sqlalchemy import Select, false, func, or_, select, union
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.enums import ApplicationStatus, JobStatus, RoleName
@@ -142,6 +142,29 @@ def _search_filter(search: str | None):
     )
 
 
+def recruiter_on_job(user_id: uuid.UUID):
+    """Whether a user is one of the recruiters a job belongs to: its primary
+    recruiter, anyone it is assigned to, or the older single `recruiter_id`
+    that jobs created before the primary-recruiter field still carry."""
+    return or_(
+        Job.primary_recruiter_id == user_id,
+        Job.assigned_to_ids.any(user_id),
+        Job.recruiter_id == user_id,
+    )
+
+
+def job_recruiters():
+    """(job_id, user_id) for every recruiter each job belongs to, once per
+    pair — the same ownership `recruiter_on_job` tests, for grouping by
+    recruiter."""
+    by_field = [
+        select(Job.id.label("job_id"), column.label("user_id")).where(column.is_not(None))
+        for column in (Job.primary_recruiter_id, Job.recruiter_id)
+    ]
+    assigned = select(Job.id.label("job_id"), func.unnest(Job.assigned_to_ids).label("user_id"))
+    return union(*by_field, assigned).subquery()
+
+
 def build_jobs_query(
     organization_id: uuid.UUID,
     *,
@@ -162,7 +185,7 @@ def build_jobs_query(
     if client_id is not None:
         query = query.where(Job.client_id == client_id)
     if recruiter_id is not None:
-        query = query.where(Job.recruiter_id == recruiter_id)
+        query = query.where(recruiter_on_job(recruiter_id))
     condition = _search_filter(search)
     if condition is not None:
         query = query.where(condition)

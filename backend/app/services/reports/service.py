@@ -20,6 +20,7 @@ from app.db.models.job import Job
 from app.db.models.offer import Offer
 from app.db.models.pipeline_stage import StageTemplateStage
 from app.db.models.user import User
+from app.services.jobs.service import job_recruiters, recruiter_on_job
 from app.services.pipeline.service import get_default_stage_template
 
 
@@ -79,21 +80,27 @@ def source_effectiveness(db: Session, organization_id: uuid.UUID) -> list[dict]:
 
 def recruiter_performance(db: Session, organization_id: uuid.UUID) -> list[dict]:
     """Per recruiter with at least one open job: open jobs, and applications
-    and hires across all their jobs. One grouped query, not three per recruiter."""
+    and hires across all their jobs. A job counts for its primary recruiter
+    and everyone it is assigned to, as the job page shows them. One grouped
+    query, not three per recruiter."""
+    owners = job_recruiters()
     open_jobs = func.count(func.distinct(Job.id)).filter(Job.status == JobStatus.ACTIVE.value)
     rows = db.execute(
         select(
-            Job.recruiter_id,
+            owners.c.user_id,
             User.full_name,
             open_jobs,
             func.count(Application.id),
             func.count(Application.id).filter(Application.status == ApplicationStatus.HIRED.value),
         )
-        .join(User, User.id == Job.recruiter_id)
+        .select_from(owners)
+        .join(Job, Job.id == owners.c.job_id)
+        .join(User, User.id == owners.c.user_id)
         .outerjoin(Application, Application.job_id == Job.id)
-        .where(Job.organization_id == organization_id)
-        .group_by(Job.recruiter_id, User.full_name)
+        .where(Job.organization_id == organization_id, Job.deleted_at.is_(None))
+        .group_by(owners.c.user_id, User.full_name)
         .having(open_jobs > 0)
+        .order_by(User.full_name)
     ).all()
     return [
         {
@@ -265,7 +272,7 @@ def recruiter_dashboard(db: Session, organization_id: uuid.UUID, recruiter_id: u
         db.scalar(
             select(func.count(Job.id)).where(
                 Job.organization_id == organization_id,
-                Job.recruiter_id == recruiter_id,
+                recruiter_on_job(recruiter_id),
                 Job.status == JobStatus.ACTIVE.value,
             )
         )
@@ -278,7 +285,7 @@ def recruiter_dashboard(db: Session, organization_id: uuid.UUID, recruiter_id: u
             select(func.count(Application.id))
             .join(Job, Job.id == Application.job_id)
             .where(
-                Job.recruiter_id == recruiter_id, Job.organization_id == organization_id, Application.applied_at >= week_ago
+                recruiter_on_job(recruiter_id), Job.organization_id == organization_id, Application.applied_at >= week_ago
             )
         )
         or 0
@@ -290,7 +297,7 @@ def recruiter_dashboard(db: Session, organization_id: uuid.UUID, recruiter_id: u
             .join(Application, Application.id == Interview.application_id)
             .join(Job, Job.id == Application.job_id)
             .where(
-                Job.recruiter_id == recruiter_id,
+                recruiter_on_job(recruiter_id),
                 Interview.organization_id == organization_id,
                 Interview.status == InterviewStatus.SCHEDULED.value,
             )
@@ -304,7 +311,7 @@ def recruiter_dashboard(db: Session, organization_id: uuid.UUID, recruiter_id: u
             .join(Application, Application.id == Offer.application_id)
             .join(Job, Job.id == Application.job_id)
             .where(
-                Job.recruiter_id == recruiter_id,
+                recruiter_on_job(recruiter_id),
                 Offer.organization_id == organization_id,
                 Offer.status == OfferStatus.APPROVAL_PENDING.value,
             )

@@ -30,14 +30,8 @@ import {
   useSaveJobSearchCriteria,
   useSetJobCustomField,
 } from "@/lib/hooks/use-jobs";
-import {
-  DEGREE_OPTIONS,
-  JOB_NOTE_ACTIONS,
-  JOB_NOTE_TYPES,
-  RADIUS_OPTIONS,
-  WORK_AUTHORIZATIONS,
-} from "@/lib/api/jobs";
-import { COUNTRIES } from "@/lib/api/clients";
+import { DEGREE_OPTIONS, JOB_NOTE_ACTIONS, JOB_NOTE_TYPES, RADIUS_OPTIONS } from "@/lib/api/jobs";
+import { COUNTRIES, DEFAULT_COUNTRY, withSaved, workAuthorizationsFor } from "@/lib/geo";
 import type { JobSearchCriteriaInput } from "@/lib/api/types";
 import { Briefcase, MapPin, Plus, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -816,7 +810,7 @@ export function JobDetailClient() {
                   <div className="space-y-1.5">
                     <Label className="text-xs">Country</Label>
                     <Select
-                      value={criteria.country ?? "United States"}
+                      value={criteria.country ?? DEFAULT_COUNTRY}
                       onValueChange={(v) => setCriteriaField("country", v)}
                     >
                       <SelectTrigger className="h-9">
@@ -973,7 +967,10 @@ export function JobDetailClient() {
                   <div className="space-y-1.5">
                     <Label className="text-xs">Work authorization</Label>
                     <div className="flex flex-wrap gap-1.5">
-                      {WORK_AUTHORIZATIONS.map((w) => {
+                      {withSaved(
+                        workAuthorizationsFor(criteria.country),
+                        criteria.work_authorizations,
+                      ).map((w) => {
                         const isOn = criteria.work_authorizations.includes(w);
                         return (
                           <button

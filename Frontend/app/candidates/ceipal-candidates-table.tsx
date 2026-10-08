@@ -3,11 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { FileText, Loader2 } from "lucide-react";
 import { Pager } from "@/components/ui/pager";
 import { listCeipalCandidates, type CeipalCandidateRow } from "@/lib/api/ceipal";
-import { downloadFile } from "@/lib/api/client";
+import { CandidateDocumentLink } from "@/components/document-preview-dialog";
 
 const PAGE_SIZE = 50;
 
@@ -125,38 +123,14 @@ function CellValue({ column, value }: { column: string; value: string }) {
 }
 
 function ResumeLink({ row }: { row: CeipalCandidateRow }) {
-  const [downloading, setDownloading] = useState(false);
   if (!row.resume) return <span className="text-xs text-muted-foreground">—</span>;
-  const resume = row.resume;
-
-  async function download() {
-    setDownloading(true);
-    try {
-      await downloadFile(
-        `/candidates/${row.candidate_id}/documents/${resume.document_id}/download`,
-        resume.file_name,
-      );
-    } catch {
-      toast.error("Couldn't download the résumé. Try again.");
-    } finally {
-      setDownloading(false);
-    }
-  }
-
   return (
-    <button
-      type="button"
-      onClick={() => void download()}
-      disabled={downloading}
-      className="inline-flex items-center gap-1 text-xs text-primary hover:underline max-w-[240px]"
-      title={resume.file_name}
-    >
-      {downloading ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-      ) : (
-        <FileText className="h-3.5 w-3.5 shrink-0" />
-      )}
-      <span className="truncate">{resume.file_name}</span>
-    </button>
+    <CandidateDocumentLink
+      candidateId={row.candidate_id}
+      documentId={row.resume.document_id}
+      fileName={row.resume.file_name}
+      className="gap-1 text-xs max-w-[240px]"
+      iconClassName="h-3.5 w-3.5"
+    />
   );
 }

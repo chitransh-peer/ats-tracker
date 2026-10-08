@@ -145,18 +145,6 @@ export const CURRENCIES = ["USD", "CAD", "INR", "GBP", "AUD"] as const;
 
 export const TAX_TERM_OPTIONS = ["C2C", "W-2", "1099", "W-2 Hourly", "Full Time"] as const;
 
-export const WORK_AUTHORIZATIONS = [
-  "US Citizen",
-  "Green Card",
-  "H1-B",
-  "H4-EAD",
-  "OPT-EAD",
-  "CPT",
-  "GC-EAD",
-  "TN Visa",
-  "Canadian Citizen",
-] as const;
-
 export const JOB_REQUIRED_DOCUMENTS = [
   "Resume",
   "Right to Represent",
