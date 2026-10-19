@@ -24,11 +24,12 @@ from app.core.enums import (
 from app.db.models.application import Application
 from app.db.models.bench import BenchProfile, BenchSubmission
 from app.db.models.candidate import Candidate, CandidateNote, CandidateTag
-from app.db.models.client import Client
+from app.db.models.client import Client, ClientNote
 from app.db.models.communication import OutboundMessage
 from app.db.models.hotlist import HotlistMember, HotlistRecipient
 from app.db.models.job import Job
-from app.db.models.vendor import Vendor
+from app.db.models.user import User
+from app.db.models.vendor import Vendor, VendorNote
 from app.services.imports.fields import Field, phone_digits
 
 # The last ten digits of a candidate's phone, written out literally (not as
@@ -76,6 +77,29 @@ def _in_use(db: Session, ids: list[uuid.UUID], *columns) -> set[uuid.UUID]:
     for column in columns:
         used |= set(db.scalars(select(column).where(column.in_(ids)).distinct()).all())
     return used
+
+
+def _resolve_users(db: Session, ctx: ImportContext, rows: list[RowValues], ref_key: str, id_key: str) -> None:
+    """Set `id_key` to the user named (by full name or email) in `ref_key`.
+    Someone not in this system is no reason to lose the record: the name is
+    kept in the note instead."""
+    refs = {r.get(ref_key).lower() for r in rows if r.get(ref_key)}
+    lookup: dict[str, uuid.UUID] = {}
+    if refs:
+        query = select(User.id, User.full_name, User.email).where(
+            User.organization_id == ctx.organization_id,
+            User.deleted_at.is_(None),
+            func.lower(User.full_name).in_(refs) | func.lower(User.email).in_(refs),
+        )
+        for r in db.execute(query).all():
+            lookup.setdefault(r.email.lower(), r.id)
+            lookup.setdefault(r.full_name.lower(), r.id)
+    for r in rows:
+        ref = r.get(ref_key)
+        r.values[id_key] = lookup.get(ref.lower()) if ref else None
+        if ref and r.values[id_key] is None:
+            r.warnings.append(f"No user named '{ref}'; kept in the note instead.")
+            r.notes.append(f"{ref_key.replace('_', ' ').title()}: {ref}")
 
 
 class Importer:
@@ -385,7 +409,23 @@ class VendorImporter(Importer):
         Field("zip_code", "Zip code", aliases=("Zip", "Postal Code", "Pincode"), max_length=20),
         Field("technologies", "Technologies", kind="list", aliases=("Skills", "Tech Stack")),
         Field("about_vendor", "About", aliases=("Description", "About Vendor", "Notes", "Comments")),
+        Field(
+            "ownership",
+            "Ownership",
+            aliases=("Owner", "Vendor Owner", "Primary Owner"),
+            max_length=255,
+            help="A user's name or email.",
+        ),
+        Field("business_units", "Business units", kind="list", aliases=("Business Unit",)),
+        Field("primary_business_unit", "Primary business unit", max_length=100),
         Field("created_at", "Created on", kind="datetime", aliases=("Created On", "Created date", "Date Created")),
+        Field(
+            "note",
+            "Note",
+            kind="note",
+            aliases=("Created By", "Modified By", "Modified On"),
+            help="Kept as a note on the vendor.",
+        ),
     )
     export_fields = (
         "name",
@@ -403,9 +443,14 @@ class VendorImporter(Importer):
         "country",
         "zip_code",
         "technologies",
+        "business_units",
         "created_at",
     )
-    _columns = tuple(f.key for f in fields if f.key != "created_at")
+    _columns = tuple(f.key for f in fields if f.key not in ("created_at", "ownership", "note")) + ("ownership_id",)
+
+    def resolve(self, db, ctx, rows):
+        _resolve_users(db, ctx, rows, "ownership", "ownership_id")
+        return [None] * len(rows)
 
     def match_keys(self, row):
         return [("name", row.get("name").lower())] if row.get("name") else []
@@ -434,6 +479,10 @@ class VendorImporter(Importer):
             )
             if row.values.get("created_at"):
                 vendor.created_at = row.values["created_at"]
+            if row.notes:
+                vendor.notes = [
+                    VendorNote(author_id=ctx.actor_id, body=f"Imported from {ctx.file_name}\n" + "\n".join(row.notes))
+                ]
             vendors.append(vendor)
         db.add_all(vendors)
         db.flush()
@@ -443,6 +492,14 @@ class VendorImporter(Importer):
         vendor = db.get(Vendor, record_id)
         _set_attrs(vendor, row.values, self._columns)
         vendor.updated_by = ctx.actor_id
+        if row.notes:
+            db.add(
+                VendorNote(
+                    vendor_id=vendor.id,
+                    author_id=ctx.actor_id,
+                    body=f"Updated from {ctx.file_name}\n" + "\n".join(row.notes),
+                )
+            )
 
     def in_use(self, db, ids):
         return _in_use(db, ids, BenchSubmission.vendor_id, HotlistRecipient.vendor_id)
@@ -474,6 +531,7 @@ class ClientImporter(Importer):
             kind="choice",
             aliases=("Client Status",),
             choices=tuple(s.value for s in ClientStatus),
+            synonyms=(("Inactive", "Paused"), ("On Hold", "Paused"), ("Hold", "Paused"), ("Lead", "Prospect")),
             default=ClientStatus.ACTIVE.value,
         ),
         Field("category", "Category", max_length=50),
@@ -489,8 +547,24 @@ class ClientImporter(Importer):
         Field("country", "Country", max_length=100),
         Field("postal_code", "Postal code", aliases=("Zip", "Zip Code", "Pincode"), max_length=20),
         Field("business_unit", "Business unit", max_length=100),
+        Field("primary_business_unit", "Primary business unit", max_length=100),
+        Field(
+            "primary_owner",
+            "Primary owner",
+            aliases=("Owner", "Client Owner", "Account Owner", "Ownership"),
+            max_length=255,
+            help="A user's name or email.",
+        ),
+        Field("display_on_job_posting", "Display on job posting", kind="bool", aliases=("Show on Job Posting",)),
         Field("about_company", "About", aliases=("Description", "About Company", "Notes", "Comments")),
         Field("created_at", "Created on", kind="datetime", aliases=("Created On", "Created date", "Date Created")),
+        Field(
+            "note",
+            "Note",
+            kind="note",
+            aliases=("Created By", "Modified By", "Modified On"),
+            help="Kept as a note on the client.",
+        ),
     )
     export_fields = (
         "client_code",
@@ -508,9 +582,17 @@ class ClientImporter(Importer):
         "country",
         "postal_code",
         "business_unit",
+        "primary_business_unit",
+        "display_on_job_posting",
         "created_at",
     )
-    _columns = tuple(f.key for f in fields if f.key not in ("created_at", "client_code"))
+    _columns = tuple(f.key for f in fields if f.key not in ("created_at", "client_code", "primary_owner", "note")) + (
+        "primary_owner_id",
+    )
+
+    def resolve(self, db, ctx, rows):
+        _resolve_users(db, ctx, rows, "primary_owner", "primary_owner_id")
+        return [None] * len(rows)
 
     def match_keys(self, row):
         if row.get("client_code"):
@@ -569,6 +651,10 @@ class ClientImporter(Importer):
             )
             if row.values.get("created_at"):
                 client.created_at = row.values["created_at"]
+            if row.notes:
+                client.notes = [
+                    ClientNote(author_id=ctx.actor_id, body=f"Imported from {ctx.file_name}\n" + "\n".join(row.notes))
+                ]
             clients.append(client)
         db.add_all(clients)
         db.flush()
@@ -578,6 +664,14 @@ class ClientImporter(Importer):
         client = db.get(Client, record_id)
         _set_attrs(client, row.values, self._columns)
         client.updated_by = ctx.actor_id
+        if row.notes:
+            db.add(
+                ClientNote(
+                    client_id=client.id,
+                    author_id=ctx.actor_id,
+                    body=f"Updated from {ctx.file_name}\n" + "\n".join(row.notes),
+                )
+            )
 
     def in_use(self, db, ids):
         return _in_use(
@@ -883,6 +977,40 @@ IMPORTERS: dict[str, Importer] = {
 # Mappings shipped with the app. Keys are source column headers exactly as the
 # other system exports them; values are field keys above.
 BUILT_IN_PRESETS: dict[str, dict[str, dict[str, str]]] = {
+    "clients": {
+        "Ceipal clients": {
+            "Client Id": "client_code",
+            "Client Name": "name",
+            "Contact Number": "contact_number",
+            "Website": "website",
+            "Industry": "industry",
+            "Status": "status",
+            "Category": "category",
+            "Primary Owner": "primary_owner",
+            "Business Unit": "business_unit",
+            "Display on Job Posting": "display_on_job_posting",
+            "Created by": "note",
+            "Created On": "created_at",
+            "Modified On": "note",
+            "Modified By": "note",
+            "Primary Business Unit": "primary_business_unit",
+        }
+    },
+    "vendors": {
+        "Ceipal vendors": {
+            "Vendor Name": "name",
+            "Website": "website",
+            "Contact Number": "contact_number",
+            "State": "state",
+            "Created By": "note",
+            "Created On": "created_at",
+            "Country": "country",
+            "Ownership": "ownership",
+            "Business Unit": "business_units",
+            "Modified On": "note",
+            "Modified By": "note",
+        }
+    },
     "candidates": {
         "Ceipal applicants": {
             "Applicant ID": "external_id",
@@ -900,5 +1028,5 @@ BUILT_IN_PRESETS: dict[str, dict[str, dict[str, str]]] = {
             "Created On": "created_at",
             "Created date": "created_at",
         }
-    }
+    },
 }
