@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Download,
+  FileArchive,
   FileUp,
   Loader2,
   RotateCcw,
@@ -130,13 +131,40 @@ export function ImportExportButtons({ entity, label }: { entity: ImportEntity; l
   );
 }
 
+/** "Import from Ceipal" for clients and vendors: the usual import, taking a
+ * Ceipal CSV or JSON export with its columns already matched. Admins only. */
+export function CeipalFileImportButton({
+  entity,
+  label,
+}: {
+  entity: "clients" | "vendors";
+  label: string;
+}) {
+  const canImport = useCanImport();
+  const [open, setOpen] = useState(false);
+  if (!canImport) return null;
+  return (
+    <>
+      <Button variant="outline" size="sm" className="gap-1" onClick={() => setOpen(true)}>
+        <FileArchive className="h-4 w-4" />
+        Import from Ceipal
+      </Button>
+      {open && <ImportDialog entity={entity} label={label} ceipal onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
 function ImportDialog({
   entity,
   label,
+  ceipal = false,
   onClose,
 }: {
   entity: ImportEntity;
   label: string;
+  // A Ceipal export: CSV or JSON only, Ceipal's columns pre-matched, and a
+  // re-import updates what an earlier one brought in.
+  ceipal?: boolean;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -160,7 +188,7 @@ function ImportDialog({
   const [sample, setSample] = useState<Record<string, string>[]>([]);
   const [presets, setPresets] = useState<ImportPreset[]>([]);
   const [mapping, setMapping] = useState<Record<string, string | null>>({});
-  const [duplicateMode, setDuplicateMode] = useState<"skip" | "update">("skip");
+  const [duplicateMode, setDuplicateMode] = useState<"skip" | "update">(ceipal ? "update" : "skip");
   const [presetName, setPresetName] = useState("");
   const [check, setCheck] = useState<CheckResult | null>(null);
   const [confirmUndo, setConfirmUndo] = useState(false);
@@ -182,7 +210,19 @@ function ImportDialog({
       setJob(result.job);
       setSample(result.sample);
       setPresets(result.presets);
-      setMapping(result.job.mapping);
+      const ceipalPreset = ceipal
+        ? result.presets.find((p) => p.built_in && p.name.startsWith("Ceipal"))
+        : undefined;
+      setMapping(
+        ceipalPreset
+          ? Object.fromEntries(
+              result.job.columns.map((c) => [
+                c,
+                ceipalPreset.mapping[c] ?? result.job.mapping[c] ?? null,
+              ]),
+            )
+          : result.job.mapping,
+      );
       setStep("map");
     } catch (err) {
       setError(errorText(err, "The file could not be uploaded."));
@@ -283,10 +323,15 @@ function ImportDialog({
     <Dialog open onOpenChange={(next) => !next && !busy && onClose()}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Import {label.toLowerCase()}</DialogTitle>
+          <DialogTitle>
+            Import {label.toLowerCase()}
+            {ceipal && " from Ceipal"}
+          </DialogTitle>
           <DialogDescription>
             {step === "upload" &&
-              "Upload a CSV, Excel or JSON file. Nothing is saved until you confirm."}
+              (ceipal
+                ? `Upload a Ceipal ${label.toLowerCase()} export as CSV or JSON. Nothing is saved until you confirm.`
+                : "Upload a CSV, Excel or JSON file. Nothing is saved until you confirm.")}
             {step === "map" &&
               "Match each column in your file to a field. Columns set to “Don't import” are ignored."}
             {step === "review" && "Every row has been checked. Nothing has been saved yet."}
@@ -321,7 +366,11 @@ function ImportDialog({
               <input
                 type="file"
                 className="sr-only"
-                accept={catalog?.limits.extensions.join(",") ?? ".csv,.xlsx,.json"}
+                accept={
+                  ceipal
+                    ? ".csv,.json"
+                    : (catalog?.limits.extensions.join(",") ?? ".csv,.xlsx,.json")
+                }
                 disabled={busy}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
@@ -528,6 +577,12 @@ function ImportDialog({
               <p className="text-xs text-muted-foreground">
                 Imported candidates are tagged “Imported” and are not AI-scored. Candidates without
                 an email are imported and tagged “Missing email”.
+              </p>
+            )}
+            {ceipal && (
+              <p className="text-xs text-muted-foreground">
+                Created by, Modified on and Modified by are kept as a note on each record. Owners
+                are matched to users here by name or email; anyone not found is kept in the note.
               </p>
             )}
             {entity === "jobs" && (

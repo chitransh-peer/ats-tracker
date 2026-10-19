@@ -1,6 +1,6 @@
 "use client";
 
-import { ImportExportButtons } from "@/components/import-export";
+import { CeipalFileImportButton, ImportExportButtons } from "@/components/import-export";
 import { useState } from "react";
 import Link from "next/link";
 import { AppShell, StatCard } from "@/components/layout/AppShell";
@@ -51,6 +51,7 @@ export function VendorsClient() {
       breadcrumbs={[{ label: "Home", to: "/" }, { label: "Vendors" }]}
       actions={
         <>
+          <CeipalFileImportButton entity="vendors" label="Vendors" />
           <ImportExportButtons entity="vendors" label="Vendors" />
           <Button size="sm" className="gap-1" asChild>
             <Link href="/vendors/new">

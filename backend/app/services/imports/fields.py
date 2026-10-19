@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 
 # Values that mean "nothing here" in exported spreadsheets.
-_EMPTY_MARKERS = {"", "-", "--", "n/a", "na", "null", "none", "nil", "not available", "#n/a"}
+_EMPTY_MARKERS = {"", "-", "--", "n/a", "na", "null", "none", "nil", "not available", "#n/a", "\\n"}
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _TRUE = {"yes", "y", "true", "t", "1", "on"}
 _FALSE = {"no", "n", "false", "f", "0", "off"}
@@ -37,6 +37,11 @@ _DATETIME_FORMATS = (
     "%m/%d/%Y %H:%M",
     "%m/%d/%Y %I:%M %p",
     "%m/%d/%Y %I:%M:%S %p",
+    # Ceipal's list exports.
+    "%b %d, %Y %I:%M %p",
+    "%b %d, %Y %I:%M:%S %p",
+    "%m-%d-%Y %I:%M %p",
+    "%m-%d-%Y %H:%M:%S",
 )
 
 
@@ -58,6 +63,9 @@ class Field:
     # with a warning rather than losing the row.
     choices: tuple[str, ...] = ()
     default: str | None = None
+    # For "choice": other systems' words for one of `choices`, as
+    # (their value, our value) pairs, e.g. Ceipal's ("Inactive", "Paused").
+    synonyms: tuple[tuple[str, str], ...] = ()
     help: str | None = None
     names: tuple[str, ...] = field(init=False)
 
@@ -183,6 +191,9 @@ def convert(f: Field, raw: str | None):
         for choice in f.choices:
             if choice.lower() == text.lower():
                 return choice
+        for theirs, ours in f.synonyms:
+            if theirs.lower() == text.lower():
+                return ours
         # Not an error: exported systems have statuses of their own, and losing
         # the record over one would be worse. The caller records a warning.
         return _UnknownChoice(text, f.default)
