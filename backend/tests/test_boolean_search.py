@@ -18,7 +18,7 @@ def test_boolean_candidate_search(client, make_user, make_candidate, auth_header
     assert _names(client, headers, "java OR django") == {"Ann Java", "Bob Python"}
     assert _names(client, headers, "python NOT intern") == {"Cy Python"}
     assert _names(client, headers, "python -intern") == {"Cy Python"}
-    assert _names(client, headers, 'python AND (django OR flask)') == {"Bob Python", "Cy Python"}
+    assert _names(client, headers, "python AND (django OR flask)") == {"Bob Python", "Cy Python"}
     assert _names(client, headers, '"spring boot"') == {"Ann Java"}
     assert _names(client, headers, "pyth*") == {"Bob Python", "Cy Python"}
     assert _names(client, headers, "ann") == {"Ann Java"}

@@ -193,9 +193,7 @@ def create_job(
         resource_id=str(job.id),
     )
     db.commit()
-    notify_assigned_recruiters(
-        db, job, recruiter_ids=job_recruiter_ids(job), assigned_by=_actor_name(db, current_user.id)
-    )
+    notify_assigned_recruiters(db, job, recruiter_ids=job_recruiter_ids(job), assigned_by=_actor_name(db, current_user.id))
     return _to_read(db, job)
 
 

@@ -20,9 +20,7 @@ def job_recruiter_ids(job: Job) -> set[uuid.UUID]:
     return ids
 
 
-def notify_assigned_recruiters(
-    db: Session, job: Job, *, recruiter_ids: set[uuid.UUID], assigned_by: str | None
-) -> int:
+def notify_assigned_recruiters(db: Session, job: Job, *, recruiter_ids: set[uuid.UUID], assigned_by: str | None) -> int:
     """Send each active recruiter in `recruiter_ids` the assignment email.
 
     Returns how many were queued. Mail trouble never fails the request that
