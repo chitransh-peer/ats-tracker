@@ -53,11 +53,11 @@ def _term_condition(term: str) -> ColumnElement[bool]:
     like = f"%{escaped}%"
     return or_(
         Candidate.full_name.ilike(like),
-        Candidate.email.ilike(like),
-        Candidate.current_title.ilike(like),
-        Candidate.current_company.ilike(like),
-        Candidate.location.ilike(like),
-        Candidate.source.ilike(like),
+        func.coalesce(Candidate.email, "").ilike(like),
+        func.coalesce(Candidate.current_title, "").ilike(like),
+        func.coalesce(Candidate.current_company, "").ilike(like),
+        func.coalesce(Candidate.location, "").ilike(like),
+        func.coalesce(Candidate.source, "").ilike(like),
         func.array_to_string(Candidate.skills, " ").ilike(like),
         Candidate.tags.any(CandidateTag.tag.ilike(like)),
         Candidate.ceipal_profile.has(cast(CeipalProfile.fields, Text).ilike(like)),
