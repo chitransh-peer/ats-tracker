@@ -18,6 +18,7 @@ from app.db.models.candidate import (
 from app.db.models.interview import Interview, InterviewPanelMember
 from app.db.models.job import Job
 from app.schemas.auth import CurrentUser
+from app.services.candidates.boolean_search import candidate_search_condition
 from app.services.storage.service import build_storage_key, upload_bytes
 
 _TALENT_POOL_STATUSES = {CandidateStatus.PASSIVE.value, CandidateStatus.SILVER_MEDALIST.value}
@@ -142,8 +143,9 @@ def build_candidates_query(
     if origin is not None:
         query = query.where(Candidate.origin == origin)
     if search:
-        like = f"%{search}%"
-        query = query.where((Candidate.full_name.ilike(like)) | (Candidate.email.ilike(like)))
+        condition = candidate_search_condition(search)
+        if condition is not None:
+            query = query.where(condition)
     query = _scope_filter(query, viewer)
     return query.order_by(Candidate.created_at.desc())
 
