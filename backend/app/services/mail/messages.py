@@ -225,3 +225,50 @@ def hotlist(
         ),
     )
     return text, html
+
+
+def job_assignment(
+    *,
+    recruiter_first_name: str | None,
+    job_title: str,
+    req_id: str,
+    job_id: str,
+    client_name: str | None,
+    location: str | None,
+    assigned_by: str | None,
+) -> tuple[str, str, str]:
+    """Tells a recruiter a job has been assigned to them, with a link to open it."""
+    base = get_settings().app_base_url.rstrip("/")
+    url = f"{base}/jobs/{quote(job_id, safe='')}"
+    greeting = f"Hi {recruiter_first_name}," if recruiter_first_name else "Hello,"
+    subject = f"Job assigned: {job_title} ({req_id})"
+    by = f" by {assigned_by}" if assigned_by else ""
+    details = [("Job", f"{job_title} ({req_id})")]
+    if client_name:
+        details.append(("Client", client_name))
+    if location:
+        details.append(("Location", location))
+
+    text = (
+        f"{greeting}\n\nA job has been assigned to you{by}.\n\n"
+        + "".join(f"  {label}: {value}\n" for label, value in details)
+        + f"\nOpen it here: {url}\n"
+    )
+    rows = "".join(
+        f'<tr><td style="padding:8px 14px;font-size:13px;color:#6e7a78;width:30%;">{escape(label)}</td>'
+        f'<td style="padding:8px 14px;font-size:13px;color:#12211f;font-weight:600;">{escape(value)}</td></tr>'
+        for label, value in details
+    )
+    html = layout.render(
+        heading="A job has been assigned to you",
+        preheader=f"{job_title} ({req_id})",
+        body_html=(
+            layout.paragraph(escape(greeting))
+            + layout.paragraph(f"A job has been assigned to you{escape(by)}.")
+            + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
+            f'style="margin:0 0 16px 0;border:1px solid #dedbd2;border-radius:6px;">{rows}</table>'
+            + layout.button(url, "Open job")
+        ),
+        footer_note=f"Sent by {_org_name()} because you were assigned to this job.",
+    )
+    return subject, text, html

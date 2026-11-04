@@ -232,7 +232,7 @@ export function CandidatesClient() {
             <div className="relative flex-1 min-w-[220px]">
               <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search by name or email…"
+                placeholder='Search name, title, skills… e.g. java AND (spring OR "spring boot") NOT intern'
                 className="pl-9 h-9"
                 value={search}
                 onChange={(e) => updateSearch(e.target.value)}

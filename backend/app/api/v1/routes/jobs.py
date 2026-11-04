@@ -32,6 +32,7 @@ from app.schemas.job import (
 from app.services.applications.service import list_applications
 from app.services.audit.service import record as record_audit
 from app.services.jobs import service as job_service
+from app.services.jobs.notifications import job_recruiter_ids, notify_assigned_recruiters
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -77,6 +78,10 @@ def job_service_user_names(db: Session, user_ids) -> dict:
         return {}
     rows = db.execute(select(User.id, User.full_name).where(User.id.in_(set(user_ids)))).all()
     return {row[0]: row[1] for row in rows}
+
+
+def _actor_name(db: Session, user_id: uuid.UUID) -> str | None:
+    return job_service_user_names(db, [user_id]).get(user_id)
 
 
 def _note_read(note) -> JobNoteRead:
@@ -188,6 +193,7 @@ def create_job(
         resource_id=str(job.id),
     )
     db.commit()
+    notify_assigned_recruiters(db, job, recruiter_ids=job_recruiter_ids(job), assigned_by=_actor_name(db, current_user.id))
     return _to_read(db, job)
 
 
@@ -209,6 +215,7 @@ def update_job(
     db: Session = Depends(get_db_session),
 ) -> JobRead:
     job = job_service.get_job(db, current_user.organization_id, job_id, viewer=current_user)
+    already_assigned = job_recruiter_ids(job)
     job = job_service.update_job(db, job, actor_id=current_user.id, **payload.model_dump(exclude_unset=True))
     record_audit(
         db,
@@ -219,6 +226,12 @@ def update_job(
         resource_id=str(job.id),
     )
     db.commit()
+    notify_assigned_recruiters(
+        db,
+        job,
+        recruiter_ids=job_recruiter_ids(job) - already_assigned,
+        assigned_by=_actor_name(db, current_user.id),
+    )
     return _to_read(db, job)
 
 
