@@ -10,6 +10,9 @@ import { toast } from "sonner";
 import { AppShell, StatCard } from "@/components/layout/AppShell";
 import { useCandidatesPage, useCreateCandidate } from "@/lib/hooks/use-candidates";
 import { useBulkAddToBench } from "@/lib/hooks/use-bench";
+import { useJobs } from "@/lib/hooks/use-jobs";
+import { useCreateApplication } from "@/lib/hooks/use-applications";
+import { uploadCandidateDocument } from "@/lib/api/candidates";
 import { Pager } from "@/components/ui/pager";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,7 +37,7 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Search, UserPlus } from "lucide-react";
+import { Briefcase, Search, UserPlus } from "lucide-react";
 import { initialsOf } from "@/lib/utils";
 import { ApiError } from "@/lib/api/client";
 
@@ -47,6 +50,7 @@ function AddCandidateDialog() {
   const [currentTitle, setCurrentTitle] = useState("");
   const [currentCompany, setCurrentCompany] = useState("");
   const [skills, setSkills] = useState("");
+  const [resume, setResume] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const createCandidate = useCreateCandidate();
 
@@ -54,7 +58,7 @@ function AddCandidateDialog() {
     e.preventDefault();
     setError(null);
     try {
-      await createCandidate.mutateAsync({
+      const created = await createCandidate.mutateAsync({
         full_name: fullName,
         email,
         phone: phone || null,
@@ -65,7 +69,20 @@ function AddCandidateDialog() {
           .map((s) => s.trim())
           .filter(Boolean),
       });
+      // Manually added candidates are never AI-scored; the resume is just stored.
+      if (resume) {
+        try {
+          await uploadCandidateDocument(created.id, resume, "resume");
+        } catch (err) {
+          toast.error(
+            err instanceof ApiError
+              ? `Candidate added, but the resume failed: ${err.message}`
+              : "Candidate added, but the resume upload failed.",
+          );
+        }
+      }
       setOpen(false);
+      setResume(null);
       setFullName("");
       setEmail("");
       setPhone("");
@@ -115,12 +132,96 @@ function AddCandidateDialog() {
             <Label className="text-xs">Skills (comma separated)</Label>
             <Input value={skills} onChange={(e) => setSkills(e.target.value)} />
           </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Resume (PDF, DOC or DOCX, optional)</Label>
+            <Input
+              type="file"
+              accept=".pdf,.doc,.docx"
+              onChange={(e) => setResume(e.target.files?.[0] ?? null)}
+            />
+          </div>
           <DialogFooter>
             <Button type="submit" disabled={createCandidate.isPending}>
               {createCandidate.isPending ? "Adding…" : "Add candidate"}
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AddToJobDialog({
+  candidateIds,
+  open,
+  onOpenChange,
+  onDone,
+}: {
+  candidateIds: string[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDone: () => void;
+}) {
+  const [jobId, setJobId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const { data: jobs } = useJobs({ limit: 200 });
+  const createApplication = useCreateApplication();
+
+  async function handleConfirm() {
+    if (!jobId) return;
+    setBusy(true);
+    let ok = 0;
+    const reasons: string[] = [];
+    for (const candidate_id of candidateIds) {
+      try {
+        await createApplication.mutateAsync({ candidate_id, job_id: jobId, source: "Manual" });
+        ok += 1;
+      } catch (err) {
+        reasons.push(err instanceof ApiError ? err.message : "Unknown error");
+      }
+    }
+    setBusy(false);
+    if (ok > 0) toast.success(`Added ${ok} candidate${ok === 1 ? "" : "s"} to the job.`);
+    if (reasons.length > 0) {
+      toast.error(`${reasons.length} couldn't be added.`, {
+        description: [...new Set(reasons)].join("; "),
+      });
+    }
+    if (ok > 0) {
+      setJobId("");
+      onOpenChange(false);
+      onDone();
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add to job</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-1.5">
+          <Label className="text-xs">
+            Job for {candidateIds.length} selected candidate{candidateIds.length === 1 ? "" : "s"}
+          </Label>
+          <Select value={jobId} onValueChange={setJobId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select a job" />
+            </SelectTrigger>
+            <SelectContent>
+              {(jobs ?? []).map((j) => (
+                <SelectItem key={j.id} value={j.id}>
+                  {j.title} ({j.req_id})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <DialogFooter>
+          <Button onClick={handleConfirm} disabled={!jobId || busy}>
+            {busy ? "Adding…" : "Add to job"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -136,6 +237,7 @@ export function CandidatesClient() {
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [jobDialogOpen, setJobDialogOpen] = useState(false);
 
   // Reset to the first page whenever the filters change, or "page 2 of the
   // old filter" would silently apply to the new one.
@@ -267,6 +369,15 @@ export function CandidatesClient() {
                 </Button>
                 <Button
                   size="sm"
+                  variant="outline"
+                  className="h-7 gap-1 text-xs"
+                  onClick={() => setJobDialogOpen(true)}
+                >
+                  <Briefcase className="h-3.5 w-3.5" />
+                  Add to job
+                </Button>
+                <Button
+                  size="sm"
                   variant="ghost"
                   className="h-7 text-xs"
                   onClick={() => setSelected(new Set())}
@@ -381,6 +492,12 @@ export function CandidatesClient() {
           )}
         </CardContent>
       </Card>
+      <AddToJobDialog
+        candidateIds={[...selected]}
+        open={jobDialogOpen}
+        onOpenChange={setJobDialogOpen}
+        onDone={() => setSelected(new Set())}
+      />
     </AppShell>
   );
 }
