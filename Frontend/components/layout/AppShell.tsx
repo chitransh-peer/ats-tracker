@@ -85,7 +85,7 @@ const nav: NavSection[] = [
     section: "Hiring",
     items: [
       { to: "/jobs", label: "Jobs", icon: Briefcase, roles: CORE },
-      { to: "/applications", label: "Applications", icon: FileText, roles: ALL_INTERNAL },
+      { to: "/applications", label: "Applicants", icon: FileText, roles: ALL_INTERNAL },
       { to: "/candidates", label: "Candidates", icon: Users, roles: ALL_INTERNAL },
       { to: "/talent-pool", label: "Talent Pool", icon: UserPlus, roles: ALL_INTERNAL },
       { to: "/pipeline", label: "Pipeline", icon: GitBranch, roles: CORE },
